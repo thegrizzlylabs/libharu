@@ -47,6 +47,10 @@ HPDF_EncryptDict_SetPassword  (HPDF_EncryptDict  dict,
                                const char   *owner_passwd,
                                const char   *user_passwd);
 
+HPDF_STATUS
+HPDF_EncryptDict_SetUserPassword  (HPDF_EncryptDict  dict,
+                               const char   *user_passwd);
+
 
 HPDF_BOOL
 HPDF_EncryptDict_Validate  (HPDF_EncryptDict  dict);
