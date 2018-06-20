@@ -43,7 +43,7 @@
 /* #undef LIBHPDF_DEBUG_TRACE */
 
 /* libpng is not available */
-#define LIBHPDF_HAVE_NOPNGLIB
+//#define LIBHPDF_HAVE_NOPNGLIB
 
 /* zlib is not available */
 /* #undef LIBHPDF_HAVE_NOZLIB */
