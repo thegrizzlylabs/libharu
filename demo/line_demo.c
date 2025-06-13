@@ -29,6 +29,7 @@ error_handler  (HPDF_STATUS   error_no,
                 HPDF_STATUS   detail_no,
                 void         *user_data)
 {
+    (void) user_data; /* Not used */
     printf ("ERROR: error_no=%04X, detail_no=%u\n", (HPDF_UINT)error_no,
                 (HPDF_UINT)detail_no);
     longjmp(env, 1);
@@ -82,6 +83,7 @@ draw_rect (HPDF_Page     page,
 
 int main (int argc, char **argv)
 {
+    (void) argc; /* Not used */
     const char* page_title = "Line Example";
 
     HPDF_Doc  pdf;
@@ -89,9 +91,9 @@ int main (int argc, char **argv)
     HPDF_Page page;
     char fname[256];
 
-    const HPDF_UINT16 DASH_MODE1[] = {3};
-    const HPDF_UINT16 DASH_MODE2[] = {3, 7};
-    const HPDF_UINT16 DASH_MODE3[] = {8, 7, 2, 7};
+    const HPDF_REAL DASH_MODE1[] = {3.0};
+    const HPDF_REAL DASH_MODE2[] = {3.0, 7.0};
+    const HPDF_REAL DASH_MODE3[] = {8.0, 7.0, 2.0, 7.0};
 
     double x;
     double y;
@@ -141,7 +143,7 @@ int main (int argc, char **argv)
 
     HPDF_Page_SetFontAndSize (page, font, 10);
 
-    /* Draw verious widths of lines. */
+    /* Draw various widths of lines. */
     HPDF_Page_SetLineWidth (page, 0);
     draw_line (page, 60, 770, "line width = 0");
 
@@ -154,18 +156,18 @@ int main (int argc, char **argv)
     /* Line dash pattern */
     HPDF_Page_SetLineWidth (page, 1.0);
 
-    HPDF_Page_SetDash (page, DASH_MODE1, 1, 1);
+    HPDF_Page_SetDash (page, DASH_MODE1, 1, 1.0);
     draw_line (page, 60, 680, "dash_ptn=[3], phase=1 -- "
                 "2 on, 3 off, 3 on...");
 
-    HPDF_Page_SetDash (page, DASH_MODE2, 2, 2);
+    HPDF_Page_SetDash (page, DASH_MODE2, 2, 2.0);
     draw_line (page, 60, 650, "dash_ptn=[7, 3], phase=2 -- "
                 "5 on 3 off, 7 on,...");
 
-    HPDF_Page_SetDash (page, DASH_MODE3, 4, 0);
+    HPDF_Page_SetDash (page, DASH_MODE3, 4, 0.0);
     draw_line (page, 60, 620, "dash_ptn=[8, 7, 2, 7], phase=0");
 
-    HPDF_Page_SetDash (page, NULL, 0, 0);
+    HPDF_Page_SetDash (page, NULL, 0, 0.0);
 
     HPDF_Page_SetLineWidth (page, 30);
     HPDF_Page_SetRGBStroke (page, 0.0, 0.5, 0.0);
@@ -177,7 +179,7 @@ int main (int argc, char **argv)
     HPDF_Page_SetLineCap (page, HPDF_ROUND_END);
     draw_line2 (page, 60, 505, "PDF_ROUND_END");
 
-    HPDF_Page_SetLineCap (page, HPDF_PROJECTING_SCUARE_END);
+    HPDF_Page_SetLineCap (page, HPDF_PROJECTING_SQUARE_END);
     draw_line2 (page, 60, 440, "PDF_PROJECTING_SCUARE_END");
 
     /* Line Join Style */
@@ -276,14 +278,14 @@ int main (int argc, char **argv)
     HPDF_Page_ShowText (page, "(x2, y2)");
     HPDF_Page_EndText (page);
 
-    HPDF_Page_SetDash (page, DASH_MODE1, 1, 0);
+    HPDF_Page_SetDash (page, DASH_MODE1, 1, 0.0);
 
     HPDF_Page_SetLineWidth (page, 0.5);
     HPDF_Page_MoveTo (page, x1, y1);
     HPDF_Page_LineTo (page, x2, y2);
     HPDF_Page_Stroke (page);
 
-    HPDF_Page_SetDash (page, NULL, 0, 0);
+    HPDF_Page_SetDash (page, NULL, 0, 0.0);
 
     HPDF_Page_SetLineWidth (page, 1.5);
 
@@ -310,14 +312,14 @@ int main (int argc, char **argv)
     HPDF_Page_ShowText (page, "(x2, y2)");
     HPDF_Page_EndText (page);
 
-    HPDF_Page_SetDash (page, DASH_MODE1, 1, 0);
+    HPDF_Page_SetDash (page, DASH_MODE1, 1, 0.0);
 
     HPDF_Page_SetLineWidth (page, 0.5);
     HPDF_Page_MoveTo (page, x, y);
     HPDF_Page_LineTo (page, x1, y1);
     HPDF_Page_Stroke (page);
 
-    HPDF_Page_SetDash (page, NULL, 0, 0);
+    HPDF_Page_SetDash (page, NULL, 0, 0.0);
 
     HPDF_Page_SetLineWidth (page, 1.5);
     HPDF_Page_MoveTo (page, x, y);
@@ -346,7 +348,7 @@ int main (int argc, char **argv)
     HPDF_Page_ShowText (page, "(x3, y3)");
     HPDF_Page_EndText (page);
 
-    HPDF_Page_SetDash (page, DASH_MODE1, 1, 0);
+    HPDF_Page_SetDash (page, DASH_MODE1, 1, 0.0);
 
     HPDF_Page_SetLineWidth (page, 0.5);
     HPDF_Page_MoveTo (page, x, y);
@@ -356,7 +358,7 @@ int main (int argc, char **argv)
     HPDF_Page_LineTo (page, x3, y3);
     HPDF_Page_Stroke (page);
 
-    HPDF_Page_SetDash (page, NULL, 0, 0);
+    HPDF_Page_SetDash (page, NULL, 0, 0.0);
 
     HPDF_Page_SetLineWidth (page, 1.5);
     HPDF_Page_MoveTo (page, x, y);

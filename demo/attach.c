@@ -18,7 +18,7 @@
 #include <setjmp.h>
 #include "hpdf.h"
 
-const char *text = "This PDF should have an attachment named attach.c";
+const char *text = "This PDF should have an attachment named basn3p08.png";
 
 jmp_buf env;
 
@@ -31,6 +31,7 @@ error_handler  (HPDF_STATUS   error_no,
                 HPDF_STATUS   detail_no,
                 void         *user_data)
 {
+    (void) user_data; /* Not used */
     printf ("ERROR: error_no=%04X, detail_no=%u\n", (HPDF_UINT)error_no,
                 (HPDF_UINT)detail_no);
     longjmp(env, 1);
@@ -39,6 +40,7 @@ error_handler  (HPDF_STATUS   error_no,
 int
 main (int argc, char **argv)
 {
+    (void) argc; /* Not used */
     HPDF_Doc  pdf;
     HPDF_Font font;
     HPDF_Page page;
@@ -76,8 +78,7 @@ main (int argc, char **argv)
     HPDF_Page_EndText (page);
 
     /* attach a file to the document */
-    HPDF_AttachFile (pdf, "attach.c");
-    HPDF_AttachFile (pdf, "jpeg_demo.c");
+    HPDF_AttachFile (pdf, "pngsuite/basn3p08.png");
 
     /* save the document to a file */
     HPDF_SaveToFile (pdf, fname);

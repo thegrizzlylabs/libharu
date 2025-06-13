@@ -31,6 +31,7 @@ error_handler  (HPDF_STATUS   error_no,
                 HPDF_STATUS   detail_no,
                 void         *user_data)
 {
+    (void) user_data; /* Not used */
     printf ("ERROR: error_no=%04X, detail_no=%u\n", (HPDF_UINT)error_no,
                 (HPDF_UINT)detail_no);
     longjmp(env, 1);
@@ -80,7 +81,7 @@ print_grid  (HPDF_Doc     pdf,
     }
 
 
-    /* Draw virtical lines */
+    /* Draw vertical lines */
     x = 0;
     while (x < width) {
         if (x % 10 == 0)
@@ -132,7 +133,7 @@ print_grid  (HPDF_Doc     pdf,
     }
 
 
-    /* Draw virtical text */
+    /* Draw vertical text */
     x = 0;
     while (x < width) {
         if (x % 50 == 0 && x > 0) {
@@ -166,6 +167,7 @@ print_grid  (HPDF_Doc     pdf,
 int
 main (int argc, char **argv)
 {
+    (void) argc; /* Not used */
     HPDF_Doc  pdf;
     HPDF_Page page;
     char fname[256];

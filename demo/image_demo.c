@@ -19,7 +19,7 @@
 #include <setjmp.h>
 #include "hpdf.h"
 
-#ifndef HPDF_NOPNGLIB
+#ifdef LIBHPDF_HAVE_LIBPNG
 
 jmp_buf env;
 
@@ -32,6 +32,7 @@ error_handler  (HPDF_STATUS   error_no,
                 HPDF_STATUS   detail_no,
                 void         *user_data)
 {
+    (void) user_data; /* Not used */
     printf ("ERROR: error_no=%04X, detail_no=%u\n", (HPDF_UINT)error_no,
                 (HPDF_UINT)detail_no);
     longjmp(env, 1);
@@ -75,6 +76,7 @@ show_description (HPDF_Page    page,
 
 int main (int argc, char **argv)
 {
+    (void) argc; /* Not used */
     HPDF_Doc  pdf;
     HPDF_Font font;
     HPDF_Page page;
@@ -211,7 +213,7 @@ int main (int argc, char **argv)
 
     /* Rotating image */
     angle = 30;     /* rotation of 30 degrees. */
-    rad = angle / 180 * 3.141592; /* Calcurate the radian value. */
+    rad = angle / 180 * 3.141592; /* Calculate the radian value. */
 
     HPDF_Page_GSave (page);
 
@@ -267,14 +269,14 @@ int main (int argc, char **argv)
     return 0;
 }
 
-#else
+#else /* LIBHPDF_HAVE_LIBPNG */
 
 int main()
 {
-    printf("WARNING: if you want to run this demo, \n"
-           "make libhpdf with HPDF_USE_PNGLIB option.\n");
+    printf("WARNING: image_demo was not built correctly. \n"
+           "Make sure libpng is installed and CMake is able to find it.\n");
     return 0;
 }
 
-#endif /* HPDF_NOPNGLIB */
+#endif /* LIBHPDF_HAVE_LIBPNG */
 

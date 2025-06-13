@@ -29,6 +29,7 @@ error_handler (HPDF_STATUS   error_no,
                HPDF_STATUS   detail_no,
                void         *user_data)
 {
+    (void) user_data; /* Not used */
     printf ("ERROR: error_no=%04X, detail_no=%u\n", (HPDF_UINT)error_no,
                 (HPDF_UINT)detail_no);
     longjmp(env, 1);
@@ -36,6 +37,7 @@ error_handler (HPDF_STATUS   error_no,
 
 int main (int argc, char **argv)
 {
+    (void) argc; /* Not used */
     HPDF_Doc  pdf;
     char fname[256];
     HPDF_Font title_font;
@@ -80,14 +82,14 @@ int main (int argc, char **argv)
     HPDF_UseJPEncodings (pdf);
     HPDF_UseJPFonts (pdf);
 
-    detail_font[0] = HPDF_GetFont (pdf, "MS-Mincyo", "90ms-RKSJ-H");
-    detail_font[1] = HPDF_GetFont (pdf, "MS-Mincyo,Bold", "90ms-RKSJ-H");
-    detail_font[2] = HPDF_GetFont (pdf, "MS-Mincyo,Italic", "90ms-RKSJ-H");
-    detail_font[3] = HPDF_GetFont (pdf, "MS-Mincyo,BoldItalic", "90ms-RKSJ-H");
-    detail_font[4] = HPDF_GetFont (pdf, "MS-PMincyo", "90msp-RKSJ-H");
-    detail_font[5] = HPDF_GetFont (pdf, "MS-PMincyo,Bold", "90msp-RKSJ-H");
-    detail_font[6] = HPDF_GetFont (pdf, "MS-PMincyo,Italic", "90msp-RKSJ-H");
-    detail_font[7] = HPDF_GetFont (pdf, "MS-PMincyo,BoldItalic",
+    detail_font[0] = HPDF_GetFont (pdf, "MS-Mincho", "90ms-RKSJ-H");
+    detail_font[1] = HPDF_GetFont (pdf, "MS-Mincho,Bold", "90ms-RKSJ-H");
+    detail_font[2] = HPDF_GetFont (pdf, "MS-Mincho,Italic", "90ms-RKSJ-H");
+    detail_font[3] = HPDF_GetFont (pdf, "MS-Mincho,BoldItalic", "90ms-RKSJ-H");
+    detail_font[4] = HPDF_GetFont (pdf, "MS-PMincho", "90msp-RKSJ-H");
+    detail_font[5] = HPDF_GetFont (pdf, "MS-PMincho,Bold", "90msp-RKSJ-H");
+    detail_font[6] = HPDF_GetFont (pdf, "MS-PMincho,Italic", "90msp-RKSJ-H");
+    detail_font[7] = HPDF_GetFont (pdf, "MS-PMincho,BoldItalic",
             "90msp-RKSJ-H");
     detail_font[8] = HPDF_GetFont (pdf, "MS-Gothic", "90ms-RKSJ-H");
     detail_font[9] = HPDF_GetFont (pdf, "MS-Gothic,Bold", "90ms-RKSJ-H");
