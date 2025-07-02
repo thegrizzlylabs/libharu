@@ -82,7 +82,5 @@
 
 #define G3CODES
 
-#define G3CODES
-
 #endif /* _HPDF_CONF_H */
 
