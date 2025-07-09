@@ -469,28 +469,6 @@ HPDF_SetPassword  (HPDF_Doc          pdf,
     return HPDF_Doc_SetEncryptOn (pdf);
 }
 
-HPDF_EXPORT(HPDF_STATUS)
-HPDF_SetUserPassword  (HPDF_Doc          pdf,
-                   const char  *user_passwd)
-{
-    HPDF_PTRACE ((" HPDF_SetUserPassword\n"));
-
-    if (!HPDF_HasDoc (pdf))
-        return HPDF_DOC_INVALID_OBJECT;
-
-    if (!pdf->encrypt_dict) {
-        pdf->encrypt_dict = HPDF_EncryptDict_New (pdf->mmgr, pdf->xref);
-
-        if (!pdf->encrypt_dict)
-            return HPDF_CheckError (&pdf->error);
-    }
-
-    if (HPDF_EncryptDict_SetUserPassword (pdf->encrypt_dict, user_passwd) != HPDF_OK)
-        return HPDF_CheckError (&pdf->error);
-
-    return HPDF_Doc_SetEncryptOn (pdf);
-}
-
 
 HPDF_EXPORT(HPDF_STATUS)
 HPDF_SetPermission  (HPDF_Doc    pdf,
