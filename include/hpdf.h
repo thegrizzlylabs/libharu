@@ -931,10 +931,6 @@ HPDF_SetPassword  (HPDF_Doc      pdf,
                    const char   *owner_passwd,
                    const char   *user_passwd);
 
-HPDF_EXPORT(HPDF_STATUS)
-HPDF_SetUserPassword  (HPDF_Doc          pdf,
-					   const char  *user_passwd);
-
 
 HPDF_EXPORT(HPDF_STATUS)
 HPDF_SetPermission  (HPDF_Doc    pdf,
