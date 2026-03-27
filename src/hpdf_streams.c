@@ -103,6 +103,12 @@ HPDF_FileWriter_WriteFunc  (HPDF_Stream      stream,
 void
 HPDF_FileStream_FreeFunc  (HPDF_Stream  stream);
 
+static HPDF_STATUS
+HPDF_Stream_ReadAll  (HPDF_Stream   stream,
+                      HPDF_MMgr     mmgr,
+                      HPDF_BYTE   **buf,
+                      HPDF_UINT    *len);
+
 
 
 /*
@@ -500,26 +506,36 @@ HPDF_Stream_WriteBinary  (HPDF_Stream      stream,
     HPDF_BOOL flg = HPDF_FALSE;
     HPDF_UINT idx = 0;
     HPDF_UINT i;
+    HPDF_UINT write_len = len;
     const HPDF_BYTE* p;
     HPDF_STATUS ret = HPDF_OK;
 
     HPDF_PTRACE((" HPDF_Stream_WriteBinary\n"));
 
     if (e) {
-        if (len <= HPDF_TEXT_DEFAULT_LEN)
-            pbuf = ebuf;
-        else {
-            pbuf = (HPDF_BYTE *)HPDF_GetMem (stream->mmgr, len);
-            flg = HPDF_TRUE;
-        }
+        if (e->mode == HPDF_ENCRYPT_R6) {
+            ret = HPDF_Encrypt_CryptBufEx (e, stream->mmgr, data, len, &pbuf,
+                    &write_len);
+            if (ret != HPDF_OK)
+                return ret;
+            flg = (write_len > 0);
+        } else {
+            if (len <= HPDF_TEXT_DEFAULT_LEN)
+                pbuf = ebuf;
+            else {
+                pbuf = (HPDF_BYTE *)HPDF_GetMem (stream->mmgr, len);
+                flg = HPDF_TRUE;
+            }
 
-        HPDF_Encrypt_CryptBuf (e, data, pbuf, len);
+            HPDF_Encrypt_CryptBuf (e, data, pbuf, len);
+            write_len = len;
+        }
         p = pbuf;
     } else {
         p = data;
     }
 
-    for (i = 0; i < len; i++, p++) {
+    for (i = 0; i < write_len; i++, p++) {
         char c = (char)(*p >> 4);
 
         if (c <= 9)
@@ -707,6 +723,37 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
             HPDF_Error_GetCode (dst->error) != HPDF_NOERROR)
         return HPDF_THIS_FUNC_WAS_SKIPPED;
 
+    if (e && e->mode == HPDF_ENCRYPT_R6) {
+        HPDF_Stream tmp;
+        HPDF_BYTE *plain = NULL;
+        HPDF_BYTE *cipher = NULL;
+        HPDF_BYTE empty = 0;
+        HPDF_UINT plain_len = 0;
+        HPDF_UINT cipher_len = 0;
+
+        tmp = HPDF_MemStream_New (dst->mmgr, HPDF_STREAM_BUF_SIZ);
+        if (!tmp)
+            return HPDF_Error_GetCode (dst->error);
+
+        ret = HPDF_Stream_WriteToStream (src, tmp, filter, NULL);
+        if (ret == HPDF_OK)
+            ret = HPDF_Stream_ReadAll (tmp, dst->mmgr, &plain, &plain_len);
+        if (ret == HPDF_OK) {
+            ret = HPDF_Encrypt_CryptBufEx (e, dst->mmgr,
+                    plain_len > 0 ? plain : &empty, plain_len,
+                    &cipher, &cipher_len);
+        }
+        if (ret == HPDF_OK)
+            ret = HPDF_Stream_Write (dst, cipher, cipher_len);
+
+        if (plain)
+            HPDF_FreeMem (dst->mmgr, plain);
+        if (cipher)
+            HPDF_FreeMem (dst->mmgr, cipher);
+        HPDF_Stream_Free (tmp);
+        return ret;
+    }
+
     /* initialize input stream */
     if (HPDF_Stream_Size (src) == 0)
         return HPDF_OK;
@@ -750,6 +797,55 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
             break;
     }
 
+    return HPDF_OK;
+}
+
+
+static HPDF_STATUS
+HPDF_Stream_ReadAll  (HPDF_Stream   stream,
+                      HPDF_MMgr     mmgr,
+                      HPDF_BYTE   **buf,
+                      HPDF_UINT    *len)
+{
+    HPDF_UINT size;
+    HPDF_UINT total = 0;
+    HPDF_STATUS ret = HPDF_OK;
+
+    *buf = NULL;
+    *len = 0;
+
+    size = HPDF_Stream_Size (stream);
+    if (size == 0)
+        return HPDF_OK;
+
+    *buf = HPDF_GetMem (mmgr, size);
+    if (!*buf)
+        return HPDF_Error_GetCode (mmgr->error);
+
+    ret = HPDF_Stream_Seek (stream, 0, HPDF_SEEK_SET);
+    if (ret != HPDF_OK) {
+        HPDF_FreeMem (mmgr, *buf);
+        *buf = NULL;
+        return ret;
+    }
+
+    while (total < size) {
+        HPDF_UINT chunk = size - total;
+
+        ret = HPDF_Stream_Read (stream, *buf + total, &chunk);
+        total += chunk;
+        if (ret == HPDF_STREAM_EOF) {
+            ret = HPDF_OK;
+            break;
+        }
+        if (ret != HPDF_OK) {
+            HPDF_FreeMem (mmgr, *buf);
+            *buf = NULL;
+            return ret;
+        }
+    }
+
+    *len = total;
     return HPDF_OK;
 }
 

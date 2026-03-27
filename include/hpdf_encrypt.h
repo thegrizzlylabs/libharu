@@ -50,10 +50,15 @@ extern "C" {
 
 #define HPDF_ID_LEN              16
 #define HPDF_PASSWD_LEN          32
+#define HPDF_PASSWD_MAX_LEN      127
 #define HPDF_ENCRYPT_KEY_MAX     16
 #define HPDF_MD5_KEY_LEN         16
 #define HPDF_PERMISSION_PAD      0xFFFFFFC0
 #define HPDF_ARC4_BUF_SIZE       256
+#define HPDF_AES_BLOCK_SIZE      16
+#define HPDF_OU_KEY_LEN_V5       48
+#define HPDF_OE_KEY_LEN_V5       32
+#define HPDF_PERMS_LEN_V5        16
 
 
 typedef struct HPDF_MD5Context
@@ -76,14 +81,22 @@ typedef struct _HPDF_Encrypt_Rec  *HPDF_Encrypt;
 typedef struct _HPDF_Encrypt_Rec {
     HPDF_EncryptMode   mode;
 
-    /* key_len must be a multiple of 8, and between 40 to 128 */
+    /* key_len must be a multiple of 8, and between 40 to 128 for R2/R3.
+     * R6 uses 32 bytes (256 bits).
+     */
     HPDF_UINT          key_len;
 
-    /* owner-password (not encrypted) */
+    /* owner-password for legacy algorithms (not encrypted) */
     HPDF_BYTE          owner_passwd[HPDF_PASSWD_LEN];
 
-    /* user-password (not encrypted) */
+    /* user-password for legacy algorithms (not encrypted) */
     HPDF_BYTE          user_passwd[HPDF_PASSWD_LEN];
+
+    /* raw passwords for modern algorithms */
+    HPDF_BYTE          owner_passwd_raw[HPDF_PASSWD_MAX_LEN];
+    HPDF_UINT          owner_passwd_raw_len;
+    HPDF_BYTE          user_passwd_raw[HPDF_PASSWD_MAX_LEN];
+    HPDF_UINT          user_passwd_raw_len;
 
     /* owner-password (encrypted) */
     HPDF_BYTE          owner_key[HPDF_PASSWD_LEN];
@@ -92,10 +105,17 @@ typedef struct _HPDF_Encrypt_Rec {
     HPDF_BYTE          user_key[HPDF_PASSWD_LEN];
 
     HPDF_INT           permission;
+    HPDF_BOOL          encrypt_metadata;
     HPDF_BYTE          encrypt_id[HPDF_ID_LEN];
     HPDF_BYTE          encryption_key[HPDF_MD5_KEY_LEN + 5];
     HPDF_BYTE          md5_encryption_key[HPDF_MD5_KEY_LEN];
     HPDF_ARC4_Ctx_Rec  arc4ctx;
+    HPDF_BYTE          file_encryption_key[HPDF_OE_KEY_LEN_V5];
+    HPDF_BYTE          owner_key_v5[HPDF_OU_KEY_LEN_V5];
+    HPDF_BYTE          user_key_v5[HPDF_OU_KEY_LEN_V5];
+    HPDF_BYTE          owner_encryption_key_v5[HPDF_OE_KEY_LEN_V5];
+    HPDF_BYTE          user_encryption_key_v5[HPDF_OE_KEY_LEN_V5];
+    HPDF_BYTE          perms_v5[HPDF_PERMS_LEN_V5];
 } HPDF_Encrypt_Rec;
 
 
@@ -133,6 +153,9 @@ HPDF_Encrypt_CreateOwnerKey  (HPDF_Encrypt  attr);
 void
 HPDF_Encrypt_CreateEncryptionKey  (HPDF_Encrypt  attr);
 
+HPDF_STATUS
+HPDF_Encrypt_CreateR6Parameters  (HPDF_Encrypt  attr);
+
 
 void
 HPDF_Encrypt_InitKey  (HPDF_Encrypt  attr,
@@ -149,6 +172,14 @@ HPDF_Encrypt_CryptBuf  (HPDF_Encrypt  attr,
                         const HPDF_BYTE   *src,
                         HPDF_BYTE         *dst,
                         HPDF_UINT         len);
+
+HPDF_STATUS
+HPDF_Encrypt_CryptBufEx  (HPDF_Encrypt      attr,
+                          HPDF_MMgr         mmgr,
+                          const HPDF_BYTE  *src,
+                          HPDF_UINT         len,
+                          HPDF_BYTE       **dst,
+                          HPDF_UINT        *dst_len);
 
 #ifdef __cplusplus
 }

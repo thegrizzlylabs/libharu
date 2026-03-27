@@ -513,6 +513,16 @@ HPDF_SetEncryptionMode  (HPDF_Doc           pdf,
     else {
         if (mode == HPDF_ENCRYPT_R2)
             e->key_len = 5;
+        else if (mode == HPDF_ENCRYPT_R6) {
+            if (pdf->pdf_version < HPDF_VER_17)
+                pdf->pdf_version = HPDF_VER_17;
+
+            if (key_len == 0 || key_len == 32)
+                e->key_len = 32;
+            else
+                return HPDF_RaiseError (&pdf->error,
+                        HPDF_INVALID_ENCRYPT_KEY_LEN, 0);
+        }
         else {
             /* if encryption mode is specified revision-3, the version of
              * pdf file is set to 1.4

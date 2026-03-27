@@ -40,6 +40,12 @@
 #include "hpdf_consts.h"
 #include "hpdf_utils.h"
 #include "hpdf_encrypt.h"
+#include "hpdf_crypto.h"
+#include <stdlib.h>
+
+#define HPDF_SHA256_DIGEST_LEN 32
+#define HPDF_SHA384_DIGEST_LEN 48
+#define HPDF_SHA512_DIGEST_LEN 64
 
 static const HPDF_BYTE HPDF_PADDING_STRING[] = {
     0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41,
@@ -47,6 +53,243 @@ static const HPDF_BYTE HPDF_PADDING_STRING[] = {
     0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80,
     0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
 };
+
+static const HPDF_BYTE HPDF_PERMS_PAD_V5[12] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 'T', 'a', 'd', 'b', 0, 0, 0, 0
+};
+
+
+static HPDF_STATUS
+HPDF_Encrypt_RandomBytes  (HPDF_BYTE  *buf,
+                           HPDF_UINT   len)
+{
+    return HPDF_Crypto_RandomBytes (buf, len);
+}
+
+
+static HPDF_STATUS
+HPDF_Encrypt_SHA2  (HPDF_UINT         bits,
+                    const HPDF_BYTE  *buf,
+                    HPDF_UINT         len,
+                    HPDF_BYTE        *digest,
+                    HPDF_UINT        *digest_len)
+{
+    return HPDF_Crypto_SHA2 (bits, buf, len, digest, digest_len);
+}
+
+
+static HPDF_STATUS
+HPDF_Encrypt_AESCBC  (const HPDF_BYTE  *key,
+                      HPDF_UINT         key_len,
+                      const HPDF_BYTE  *iv,
+                      HPDF_BOOL         use_padding,
+                      const HPDF_BYTE  *src,
+                      HPDF_UINT         len,
+                      HPDF_BYTE        *dst,
+                      HPDF_UINT        *dst_len)
+{
+    return HPDF_Crypto_AESCBC_Encrypt (key, key_len, iv, use_padding,
+            src, len, dst, dst_len);
+}
+
+
+static HPDF_STATUS
+HPDF_Encrypt_AESZeroIV  (const HPDF_BYTE  *key,
+                         HPDF_UINT         key_len,
+                         const HPDF_BYTE  *src,
+                         HPDF_UINT         len,
+                         HPDF_BYTE        *dst,
+                         HPDF_UINT        *dst_len)
+{
+    HPDF_BYTE iv[HPDF_AES_BLOCK_SIZE];
+
+    HPDF_MemSet (iv, 0, sizeof(iv));
+    return HPDF_Encrypt_AESCBC (key, key_len, iv, HPDF_FALSE, src, len,
+            dst, dst_len);
+}
+
+
+static HPDF_STATUS
+HPDF_Encrypt_HashV5  (HPDF_Encrypt      attr,
+                      const HPDF_BYTE  *password,
+                      HPDF_UINT         password_len,
+                      const HPDF_BYTE  *salt,
+                      const HPDF_BYTE  *udata,
+                      HPDF_UINT         udata_len,
+                      HPDF_BYTE         digest[HPDF_OE_KEY_LEN_V5])
+{
+    HPDF_BYTE hash_buf[HPDF_SHA512_DIGEST_LEN];
+    HPDF_BYTE *input = NULL;
+    HPDF_UINT input_len = password_len + 8 + udata_len;
+    HPDF_UINT hash_len = 0;
+    HPDF_STATUS ret;
+
+    input = (HPDF_BYTE *)malloc (input_len);
+    if (!input)
+        return HPDF_FAILED_TO_ALLOC_MEM;
+
+    HPDF_MemCpy (input, password, password_len);
+    HPDF_MemCpy (input + password_len, salt, 8);
+    if (udata_len > 0)
+        HPDF_MemCpy (input + password_len + 8, udata, udata_len);
+
+    ret = HPDF_Encrypt_SHA2 (256, input, input_len, hash_buf, &hash_len);
+    free (input);
+    if (ret != HPDF_OK)
+        return ret;
+
+    if (attr->mode == HPDF_ENCRYPT_R6) {
+        HPDF_BYTE *round_input = NULL;
+        HPDF_BYTE *round_output = NULL;
+        HPDF_UINT round_input_len;
+        HPDF_UINT round_output_len;
+        HPDF_UINT k_len = hash_len;
+        HPDF_UINT round = 0;
+        HPDF_BOOL done = HPDF_FALSE;
+
+        while (!done) {
+            HPDF_UINT i;
+            HPDF_UINT sum_mod3 = 0;
+            HPDF_UINT next_bits;
+
+            round++;
+            round_input_len = (password_len + k_len + udata_len) * 64;
+            round_input = (HPDF_BYTE *)malloc (round_input_len);
+            round_output = (HPDF_BYTE *)malloc (round_input_len + HPDF_AES_BLOCK_SIZE);
+            if (!round_input || !round_output) {
+                free (round_input);
+                free (round_output);
+                return HPDF_FAILED_TO_ALLOC_MEM;
+            }
+
+            for (i = 0; i < 64; i++) {
+                HPDF_BYTE *p = round_input + i * (password_len + k_len + udata_len);
+                HPDF_MemCpy (p, password, password_len);
+                HPDF_MemCpy (p + password_len, hash_buf, k_len);
+                if (udata_len > 0)
+                    HPDF_MemCpy (p + password_len + k_len, udata, udata_len);
+            }
+
+            ret = HPDF_Encrypt_AESCBC (hash_buf, 16, hash_buf + 16, HPDF_FALSE,
+                    round_input, round_input_len, round_output, &round_output_len);
+            free (round_input);
+            if (ret != HPDF_OK) {
+                free (round_output);
+                return ret;
+            }
+
+            for (i = 0; i < 16; i++)
+                sum_mod3 += round_output[i];
+
+            next_bits = (sum_mod3 % 3 == 0) ? 256 :
+                (sum_mod3 % 3 == 1) ? 384 : 512;
+
+            ret = HPDF_Encrypt_SHA2 (next_bits, round_output, round_output_len,
+                    hash_buf, &hash_len);
+            done = (round >= 64 &&
+                round_output[round_output_len - 1] <= (HPDF_BYTE)(round - 32));
+            free (round_output);
+            if (ret != HPDF_OK)
+                return ret;
+
+            k_len = hash_len;
+        }
+    }
+
+    HPDF_MemCpy (digest, hash_buf, HPDF_OE_KEY_LEN_V5);
+    return HPDF_OK;
+}
+
+
+static void
+HPDF_Encrypt_CreatePermsValueV5  (HPDF_Encrypt  attr,
+                                  HPDF_BYTE     perms[HPDF_PERMS_LEN_V5])
+{
+    HPDF_INT permissions = attr->permission;
+
+    perms[0] = (HPDF_BYTE)(permissions & 0xFF);
+    perms[1] = (HPDF_BYTE)((permissions >> 8) & 0xFF);
+    perms[2] = (HPDF_BYTE)((permissions >> 16) & 0xFF);
+    perms[3] = (HPDF_BYTE)((permissions >> 24) & 0xFF);
+    HPDF_MemCpy (perms + 4, HPDF_PERMS_PAD_V5, 8);
+    perms[8] = attr->encrypt_metadata ? 'T' : 'F';
+    HPDF_Encrypt_RandomBytes (perms + 12, 4);
+}
+
+
+HPDF_STATUS
+HPDF_Encrypt_CreateR6Parameters  (HPDF_Encrypt  attr)
+{
+    HPDF_BYTE validation_salt[8];
+    HPDF_BYTE key_salt[8];
+    HPDF_BYTE perms_clear[HPDF_PERMS_LEN_V5];
+    HPDF_BYTE digest[HPDF_OE_KEY_LEN_V5];
+    HPDF_UINT out_len;
+    HPDF_STATUS ret;
+
+    ret = HPDF_Encrypt_RandomBytes (attr->file_encryption_key,
+            HPDF_OE_KEY_LEN_V5);
+    if (ret != HPDF_OK)
+        return ret;
+
+    ret = HPDF_Encrypt_RandomBytes (validation_salt, sizeof(validation_salt));
+    if (ret != HPDF_OK)
+        return ret;
+    ret = HPDF_Encrypt_RandomBytes (key_salt, sizeof(key_salt));
+    if (ret != HPDF_OK)
+        return ret;
+
+    ret = HPDF_Encrypt_HashV5 (attr, attr->user_passwd_raw,
+            attr->user_passwd_raw_len, validation_salt, NULL, 0, digest);
+    if (ret != HPDF_OK)
+        return ret;
+    HPDF_MemCpy (attr->user_key_v5, digest, HPDF_OE_KEY_LEN_V5);
+    HPDF_MemCpy (attr->user_key_v5 + HPDF_OE_KEY_LEN_V5, validation_salt, 8);
+    HPDF_MemCpy (attr->user_key_v5 + HPDF_OE_KEY_LEN_V5 + 8, key_salt, 8);
+
+    ret = HPDF_Encrypt_HashV5 (attr, attr->user_passwd_raw,
+            attr->user_passwd_raw_len, key_salt, NULL, 0, digest);
+    if (ret != HPDF_OK)
+        return ret;
+    ret = HPDF_Encrypt_AESZeroIV (digest, HPDF_OE_KEY_LEN_V5,
+            attr->file_encryption_key, HPDF_OE_KEY_LEN_V5,
+            attr->user_encryption_key_v5, &out_len);
+    if (ret != HPDF_OK)
+        return ret;
+
+    ret = HPDF_Encrypt_RandomBytes (validation_salt, sizeof(validation_salt));
+    if (ret != HPDF_OK)
+        return ret;
+    ret = HPDF_Encrypt_RandomBytes (key_salt, sizeof(key_salt));
+    if (ret != HPDF_OK)
+        return ret;
+
+    ret = HPDF_Encrypt_HashV5 (attr, attr->owner_passwd_raw,
+            attr->owner_passwd_raw_len, validation_salt,
+            attr->user_key_v5, HPDF_OU_KEY_LEN_V5, digest);
+    if (ret != HPDF_OK)
+        return ret;
+    HPDF_MemCpy (attr->owner_key_v5, digest, HPDF_OE_KEY_LEN_V5);
+    HPDF_MemCpy (attr->owner_key_v5 + HPDF_OE_KEY_LEN_V5, validation_salt, 8);
+    HPDF_MemCpy (attr->owner_key_v5 + HPDF_OE_KEY_LEN_V5 + 8, key_salt, 8);
+
+    ret = HPDF_Encrypt_HashV5 (attr, attr->owner_passwd_raw,
+            attr->owner_passwd_raw_len, key_salt,
+            attr->user_key_v5, HPDF_OU_KEY_LEN_V5, digest);
+    if (ret != HPDF_OK)
+        return ret;
+    ret = HPDF_Encrypt_AESZeroIV (digest, HPDF_OE_KEY_LEN_V5,
+            attr->file_encryption_key, HPDF_OE_KEY_LEN_V5,
+            attr->owner_encryption_key_v5, &out_len);
+    if (ret != HPDF_OK)
+        return ret;
+
+    HPDF_Encrypt_CreatePermsValueV5 (attr, perms_clear);
+    ret = HPDF_Encrypt_AESZeroIV (attr->file_encryption_key,
+            HPDF_OE_KEY_LEN_V5, perms_clear, HPDF_PERMS_LEN_V5,
+            attr->perms_v5, &out_len);
+    return ret;
+}
 
 
 /*---------------------------------------------------------------------------*/
@@ -334,6 +577,7 @@ HPDF_Encrypt_Init  (HPDF_Encrypt  attr)
     HPDF_MemSet (attr, 0, sizeof(HPDF_Encrypt_Rec));
     attr->mode = HPDF_ENCRYPT_R2;
     attr->key_len = 5;
+    attr->encrypt_metadata = HPDF_TRUE;
     HPDF_MemCpy (attr->owner_passwd, HPDF_PADDING_STRING, HPDF_PASSWD_LEN);
     HPDF_MemCpy (attr->user_passwd, HPDF_PADDING_STRING, HPDF_PASSWD_LEN);
     attr->permission = HPDF_ENABLE_PRINT | HPDF_ENABLE_EDIT_ALL |
@@ -589,6 +833,9 @@ HPDF_Encrypt_InitKey  (HPDF_Encrypt  attr,
 
     HPDF_PTRACE((" HPDF_Encrypt_Init\n"));
 
+    if (attr->mode == HPDF_ENCRYPT_R6)
+        return;
+
     attr->encryption_key[attr->key_len] = (HPDF_BYTE)object_id;
     attr->encryption_key[attr->key_len + 1] = (HPDF_BYTE)(object_id >> 8);
     attr->encryption_key[attr->key_len + 2] = (HPDF_BYTE)(object_id >> 16);
@@ -616,6 +863,9 @@ HPDF_Encrypt_Reset  (HPDF_Encrypt  attr)
 
     HPDF_PTRACE((" HPDF_Encrypt_Reset\n"));
 
+    if (attr->mode == HPDF_ENCRYPT_R6)
+        return;
+
     ARC4Init(&attr->arc4ctx, attr->md5_encryption_key, key_len);
 }
 
@@ -630,6 +880,65 @@ HPDF_Encrypt_CryptBuf  (HPDF_Encrypt  attr,
 }
 
 
-/*--------------------------------------------------------------------------*/
-/*--------------------------------------------------------------------------*/
+HPDF_STATUS
+HPDF_Encrypt_CryptBufEx  (HPDF_Encrypt      attr,
+                          HPDF_MMgr         mmgr,
+                          const HPDF_BYTE  *src,
+                          HPDF_UINT         len,
+                          HPDF_BYTE       **dst,
+                          HPDF_UINT        *dst_len)
+{
+    HPDF_STATUS ret;
 
+    if (!dst || !dst_len)
+        return HPDF_SetError (mmgr->error, HPDF_INVALID_PARAMETER, 0);
+
+    *dst = NULL;
+    *dst_len = 0;
+
+    if (attr->mode == HPDF_ENCRYPT_R6) {
+        HPDF_BYTE iv[HPDF_AES_BLOCK_SIZE];
+        HPDF_BYTE *buf;
+        HPDF_UINT cipher_len = 0;
+        HPDF_UINT alloc_len = len + HPDF_AES_BLOCK_SIZE * 2;
+
+        buf = HPDF_GetMem (mmgr, alloc_len);
+        if (!buf)
+            return HPDF_Error_GetCode (mmgr->error);
+
+        ret = HPDF_Encrypt_RandomBytes (iv, sizeof(iv));
+        if (ret != HPDF_OK) {
+            HPDF_FreeMem (mmgr, buf);
+            return HPDF_SetError (mmgr->error, ret, 0);
+        }
+
+        HPDF_MemCpy (buf, iv, sizeof(iv));
+        ret = HPDF_Encrypt_AESCBC (attr->file_encryption_key,
+                HPDF_OE_KEY_LEN_V5, iv, HPDF_TRUE, src, len,
+                buf + HPDF_AES_BLOCK_SIZE, &cipher_len);
+        if (ret != HPDF_OK) {
+            HPDF_FreeMem (mmgr, buf);
+            return HPDF_SetError (mmgr->error, ret, 0);
+        }
+
+        *dst = buf;
+        *dst_len = cipher_len + HPDF_AES_BLOCK_SIZE;
+        return HPDF_OK;
+    }
+
+    if (len == 0)
+        return HPDF_OK;
+
+    *dst = HPDF_GetMem (mmgr, len);
+    if (!*dst)
+        return HPDF_Error_GetCode (mmgr->error);
+
+    HPDF_Encrypt_CryptBuf (attr, src, *dst, len);
+    *dst_len = len;
+
+    return HPDF_OK;
+}
+
+
+/*--------------------------------------------------------------------------*/
+/*--------------------------------------------------------------------------*/
