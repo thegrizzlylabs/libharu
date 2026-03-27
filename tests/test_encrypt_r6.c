@@ -148,6 +148,69 @@ generate_pdf(const char *output_path)
 }
 
 static int
+check_r6_key_length_rules(void)
+{
+    HPDF_Doc pdf;
+    HPDF_STATUS ret;
+    int ok = 1;
+
+    pdf = HPDF_New(pdf_error_handler, NULL);
+    if (!pdf)
+        return 0;
+
+    ret = HPDF_SetPassword(pdf, kOwnerPassword, kUserPassword);
+    ok &= (ret == HPDF_OK);
+
+    ret = HPDF_SetEncryptionMode(pdf, HPDF_ENCRYPT_R6, 0);
+    ok &= (ret == HPDF_OK);
+
+    ret = HPDF_SetEncryptionMode(pdf, HPDF_ENCRYPT_R6, 32);
+    ok &= (ret == HPDF_OK);
+
+    ret = HPDF_SetEncryptionMode(pdf, HPDF_ENCRYPT_R6, 16);
+    ok &= (ret == HPDF_INVALID_ENCRYPT_KEY_LEN);
+    ok &= (HPDF_GetError(pdf) == HPDF_INVALID_ENCRYPT_KEY_LEN);
+
+    HPDF_Free(pdf);
+    return ok;
+}
+
+static int
+check_pdfa_encryption_conflicts(void)
+{
+    HPDF_Doc pdf;
+    HPDF_STATUS ret;
+    int ok = 1;
+
+    pdf = HPDF_New(pdf_error_handler, NULL);
+    if (!pdf)
+        return 0;
+
+    ret = HPDF_SetPDFAConformance(pdf, HPDF_PDFA_2B);
+    ok &= (ret == HPDF_OK);
+
+    ret = HPDF_SetPassword(pdf, kOwnerPassword, kUserPassword);
+    ok &= (ret == HPDF_INVALID_OPERATION);
+    ok &= (HPDF_GetError(pdf) == HPDF_INVALID_OPERATION);
+
+    HPDF_Free(pdf);
+
+    pdf = HPDF_New(pdf_error_handler, NULL);
+    if (!pdf)
+        return 0;
+
+    ret = HPDF_SetPassword(pdf, kOwnerPassword, kUserPassword);
+    ok &= (ret == HPDF_OK);
+
+    ret = HPDF_SetPDFAConformance(pdf, HPDF_PDFA_2B);
+    ok &= (ret == HPDF_INVALID_OPERATION);
+    ok &= (HPDF_GetError(pdf) == HPDF_INVALID_OPERATION);
+
+    HPDF_Free(pdf);
+    return ok;
+}
+
+static int
 check_structural_output(const char *path)
 {
     char *buf;
@@ -240,6 +303,16 @@ main(int argc, char **argv)
 
     if (!output_path) {
         fprintf(stderr, "--output is required\n");
+        return 1;
+    }
+
+    if (!check_r6_key_length_rules()) {
+        fprintf(stderr, "unexpected R6 key length behavior\n");
+        return 1;
+    }
+
+    if (!check_pdfa_encryption_conflicts()) {
+        fprintf(stderr, "PDF/A encryption conflict checks failed\n");
         return 1;
     }
 

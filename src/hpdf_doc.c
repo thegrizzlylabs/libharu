@@ -455,6 +455,9 @@ HPDF_SetPassword  (HPDF_Doc          pdf,
     if (!HPDF_HasDoc (pdf))
         return HPDF_DOC_INVALID_OBJECT;
 
+    if (pdf->pdfa_type != HPDF_PDFA_NON_PDFA)
+        return HPDF_RaiseError(&pdf->error, HPDF_INVALID_OPERATION, 0);
+
     if (!pdf->encrypt_dict) {
         pdf->encrypt_dict = HPDF_EncryptDict_New (pdf->mmgr, pdf->xref);
 
@@ -505,6 +508,9 @@ HPDF_SetEncryptionMode  (HPDF_Doc           pdf,
     if (!HPDF_Doc_Validate (pdf))
         return HPDF_DOC_INVALID_OBJECT;
 
+    if (pdf->pdfa_type != HPDF_PDFA_NON_PDFA)
+        return HPDF_RaiseError(&pdf->error, HPDF_INVALID_OPERATION, 0);
+
     e = HPDF_EncryptDict_GetAttr (pdf->encrypt_dict);
 
     if (!e)
@@ -517,6 +523,9 @@ HPDF_SetEncryptionMode  (HPDF_Doc           pdf,
             if (pdf->pdf_version < HPDF_VER_17)
                 pdf->pdf_version = HPDF_VER_17;
 
+            /* R6 always uses a 256-bit file-encryption key. Accept 0 as
+             * "use the mode default" for API consistency with older modes.
+             */
             if (key_len == 0 || key_len == 32)
                 e->key_len = 32;
             else
