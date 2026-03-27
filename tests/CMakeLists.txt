@@ -23,4 +23,13 @@ if(QPDF_EXECUTABLE)
                 --output ${CMAKE_CURRENT_BINARY_DIR}/encrypt_r6_qpdf.pdf
                 --qpdf ${QPDF_EXECUTABLE}
     )
+
+    add_test(
+        NAME encrypt_r6_image_qpdf
+        COMMAND test_encrypt_r6
+                --output ${CMAKE_CURRENT_BINARY_DIR}/encrypt_r6_image_qpdf.pdf
+                --qpdf ${QPDF_EXECUTABLE}
+                --jpeg ${PROJECT_SOURCE_DIR}/demo/images/rgb.jpg
+                --expect-image
+    )
 endif()

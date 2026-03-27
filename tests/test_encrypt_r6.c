@@ -8,6 +8,10 @@ static const char *kOwnerPassword = "owner-secret";
 static const char *kUserPassword = "user-secret";
 static const char *kTitle = "R6 Title";
 static const char *kPageText = "Hello AES-256 R6";
+#define K_IMAGE_WIDTH_MARKER "/Width 240"
+#define K_IMAGE_HEIGHT_MARKER "/Height 320"
+#define K_IMAGE_SUBTYPE_MARKER "/Subtype /Image"
+#define K_IMAGE_COLORSPACE_MARKER "/ColorSpace /DeviceRGB"
 #define K_PAGE_TEXT_REPEAT_COUNT 1024
 
 static void
@@ -108,11 +112,12 @@ run_command_capture(const char *command, char *buf, size_t buf_size, int *exit_c
 }
 
 static int
-generate_pdf(const char *output_path)
+generate_pdf(const char *output_path, const char *jpeg_path)
 {
     HPDF_Doc pdf;
     HPDF_Page page;
     HPDF_Font font;
+    HPDF_Image image = NULL;
     HPDF_STATUS ret;
 
     pdf = HPDF_New(pdf_error_handler, NULL);
@@ -151,6 +156,22 @@ generate_pdf(const char *output_path)
     if (ret != HPDF_OK) {
         HPDF_Free(pdf);
         return 0;
+    }
+
+    if (jpeg_path) {
+        image = HPDF_LoadJpegImageFromFile(pdf, jpeg_path);
+        if (!image) {
+            HPDF_Free(pdf);
+            return 0;
+        }
+
+        ret = HPDF_Page_DrawImage(page, image, 300, 72,
+                HPDF_Image_GetWidth(image),
+                HPDF_Image_GetHeight(image));
+        if (ret != HPDF_OK) {
+            HPDF_Free(pdf);
+            return 0;
+        }
     }
 
     ret = HPDF_SaveToFile(pdf, output_path);
@@ -245,7 +266,8 @@ check_structural_output(const char *path)
 }
 
 static int
-check_qpdf_roundtrip(const char *qpdf, const char *encrypted_path)
+check_qpdf_roundtrip(const char *qpdf, const char *encrypted_path,
+        int expect_image)
 {
     char command[2048];
     char output[8192];
@@ -289,6 +311,12 @@ check_qpdf_roundtrip(const char *qpdf, const char *encrypted_path)
     HPDF_UNUSED(decrypted_len);
     ok &= contains_bytes(decrypted_buf, decrypted_len, kTitle);
     ok &= contains_bytes(decrypted_buf, decrypted_len, kPageText);
+    if (expect_image) {
+        ok &= contains_bytes(decrypted_buf, decrypted_len, K_IMAGE_SUBTYPE_MARKER);
+        ok &= contains_bytes(decrypted_buf, decrypted_len, K_IMAGE_WIDTH_MARKER);
+        ok &= contains_bytes(decrypted_buf, decrypted_len, K_IMAGE_HEIGHT_MARKER);
+        ok &= contains_bytes(decrypted_buf, decrypted_len, K_IMAGE_COLORSPACE_MARKER);
+    }
     free(decrypted_buf);
 
     remove(decrypted_path);
@@ -302,6 +330,8 @@ main(int argc, char **argv)
 {
     const char *output_path = NULL;
     const char *qpdf_path = NULL;
+    const char *jpeg_path = NULL;
+    int expect_image = 0;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -309,6 +339,10 @@ main(int argc, char **argv)
             output_path = argv[++i];
         } else if (strcmp(argv[i], "--qpdf") == 0 && i + 1 < argc) {
             qpdf_path = argv[++i];
+        } else if (strcmp(argv[i], "--jpeg") == 0 && i + 1 < argc) {
+            jpeg_path = argv[++i];
+        } else if (strcmp(argv[i], "--expect-image") == 0) {
+            expect_image = 1;
         }
     }
 
@@ -327,7 +361,7 @@ main(int argc, char **argv)
         return 1;
     }
 
-    if (!generate_pdf(output_path)) {
+    if (!generate_pdf(output_path, jpeg_path)) {
         fprintf(stderr, "failed to generate encrypted PDF\n");
         return 1;
     }
@@ -337,7 +371,7 @@ main(int argc, char **argv)
         return 1;
     }
 
-    if (qpdf_path && !check_qpdf_roundtrip(qpdf_path, output_path)) {
+    if (qpdf_path && !check_qpdf_roundtrip(qpdf_path, output_path, expect_image)) {
         fprintf(stderr, "qpdf validation failed\n");
         return 1;
     }
