@@ -8,6 +8,7 @@ static const char *kOwnerPassword = "owner-secret";
 static const char *kUserPassword = "user-secret";
 static const char *kTitle = "R6 Title";
 static const char *kPageText = "Hello AES-256 R6";
+#define K_PAGE_TEXT_REPEAT_COUNT 1024
 
 static void
 pdf_error_handler(HPDF_STATUS error_no, HPDF_STATUS detail_no, void *user_data)
@@ -121,6 +122,7 @@ generate_pdf(const char *output_path)
     ret = HPDF_SetInfoAttr(pdf, HPDF_INFO_TITLE, kTitle);
     ret |= HPDF_SetPassword(pdf, kOwnerPassword, kUserPassword);
     ret |= HPDF_SetEncryptionMode(pdf, HPDF_ENCRYPT_R6, 0);
+    ret |= HPDF_SetCompressionMode(pdf, HPDF_COMP_ALL);
     if (ret != HPDF_OK) {
         HPDF_Free(pdf);
         return 0;
@@ -135,7 +137,16 @@ generate_pdf(const char *output_path)
 
     ret = HPDF_Page_BeginText(page);
     ret |= HPDF_Page_SetFontAndSize(page, font, 18);
-    ret |= HPDF_Page_TextOut(page, 72, 720, kPageText);
+    if (ret == HPDF_OK) {
+        HPDF_UINT i;
+
+        for (i = 0; i < K_PAGE_TEXT_REPEAT_COUNT; i++) {
+            ret = HPDF_Page_TextOut(page, 72, 720 - (HPDF_REAL)(i % 50) * 12,
+                    kPageText);
+            if (ret != HPDF_OK)
+                break;
+        }
+    }
     ret |= HPDF_Page_EndText(page);
     if (ret != HPDF_OK) {
         HPDF_Free(pdf);

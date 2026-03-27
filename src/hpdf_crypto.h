@@ -28,6 +28,14 @@ HPDF_Crypto_AESCBC_Encrypt  (const HPDF_BYTE  *key,
                              HPDF_BYTE        *dst,
                              HPDF_UINT        *dst_len);
 
+HPDF_STATUS
+HPDF_Crypto_AESCBC_EncryptBlocks  (const HPDF_BYTE  *key,
+                                   HPDF_UINT         key_len,
+                                   HPDF_BYTE        *iv,
+                                   const HPDF_BYTE  *src,
+                                   HPDF_UINT         len,
+                                   HPDF_BYTE        *dst);
+
 #ifdef __cplusplus
 }
 #endif

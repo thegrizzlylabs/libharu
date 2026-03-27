@@ -152,3 +152,27 @@ HPDF_Crypto_AESCBC_Encrypt  (const HPDF_BYTE  *key,
     *dst_len = out_len;
     return HPDF_OK;
 }
+
+
+HPDF_STATUS
+HPDF_Crypto_AESCBC_EncryptBlocks  (const HPDF_BYTE  *key,
+                                   HPDF_UINT         key_len,
+                                   HPDF_BYTE        *iv,
+                                   const HPDF_BYTE  *src,
+                                   HPDF_UINT         len,
+                                   HPDF_BYTE        *dst)
+{
+    br_aes_small_cbcenc_keys ctx;
+
+    if ((len % HPDF_AES_BLOCK_SIZE) != 0)
+        return HPDF_INVALID_PARAMETER;
+
+    if (len == 0)
+        return HPDF_OK;
+
+    HPDF_MemCpy (dst, src, len);
+    br_aes_small_cbcenc_init (&ctx, key, key_len);
+    br_aes_small_cbcenc_run (&ctx, iv, dst, len);
+
+    return HPDF_OK;
+}

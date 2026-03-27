@@ -27,6 +27,7 @@
 
 #include "hpdf_conf.h"
 #include "hpdf_consts.h"
+#include "hpdf_crypto.h"
 #include "hpdf_utils.h"
 #include "hpdf_streams.h"
 
@@ -103,12 +104,27 @@ HPDF_FileWriter_WriteFunc  (HPDF_Stream      stream,
 void
 HPDF_FileStream_FreeFunc  (HPDF_Stream  stream);
 
-static HPDF_STATUS
-HPDF_Stream_ReadAll  (HPDF_Stream   stream,
-                      HPDF_MMgr     mmgr,
-                      HPDF_BYTE   **buf,
-                      HPDF_UINT    *len);
+typedef struct _HPDF_R6StreamCipher_Rec {
+    HPDF_Stream   dst;
+    HPDF_Encrypt  encrypt;
+    HPDF_BYTE     iv[HPDF_AES_BLOCK_SIZE];
+    HPDF_BYTE     tail[HPDF_AES_BLOCK_SIZE];
+    HPDF_UINT     tail_len;
+    HPDF_UINT32   written;
+} HPDF_R6StreamCipher_Rec;
 
+static HPDF_STATUS
+HPDF_R6StreamCipher_Init  (HPDF_R6StreamCipher_Rec  *cipher,
+                           HPDF_Stream               dst,
+                           HPDF_Encrypt              encrypt);
+
+static HPDF_STATUS
+HPDF_R6StreamCipher_Update  (HPDF_R6StreamCipher_Rec  *cipher,
+                             const HPDF_BYTE          *data,
+                             HPDF_UINT                 len);
+
+static HPDF_STATUS
+HPDF_R6StreamCipher_Finalize  (HPDF_R6StreamCipher_Rec  *cipher);
 
 
 /*
@@ -494,6 +510,147 @@ HPDF_Stream_WriteEscapeText  (HPDF_Stream    stream,
     return HPDF_Stream_WriteEscapeText2(stream, text, len);
 }
 
+
+static HPDF_STATUS
+HPDF_R6StreamCipher_Init  (HPDF_R6StreamCipher_Rec  *cipher,
+                           HPDF_Stream               dst,
+                           HPDF_Encrypt              encrypt)
+{
+    HPDF_STATUS ret;
+
+    cipher->dst = dst;
+    cipher->encrypt = encrypt;
+    cipher->tail_len = 0;
+    cipher->written = 0;
+
+    ret = HPDF_Crypto_RandomBytes (cipher->iv, sizeof(cipher->iv));
+    if (ret != HPDF_OK)
+        return HPDF_SetError (dst->error, ret, 0);
+
+    ret = HPDF_Stream_Write (dst, cipher->iv, sizeof(cipher->iv));
+    if (ret != HPDF_OK)
+        return ret;
+
+    cipher->written = sizeof(cipher->iv);
+    return HPDF_OK;
+}
+
+
+static HPDF_STATUS
+HPDF_R6StreamCipher_WriteBlocks  (HPDF_R6StreamCipher_Rec  *cipher,
+                                  const HPDF_BYTE          *data,
+                                  HPDF_UINT                 len)
+{
+    HPDF_BYTE outbuf[HPDF_STREAM_BUF_SIZ];
+    HPDF_STATUS ret;
+
+    while (len > 0) {
+        HPDF_UINT chunk = len;
+
+        if (chunk > sizeof(outbuf))
+            chunk = sizeof(outbuf);
+        chunk -= chunk % HPDF_AES_BLOCK_SIZE;
+
+        ret = HPDF_Crypto_AESCBC_EncryptBlocks (
+                cipher->encrypt->file_encryption_key,
+                HPDF_OE_KEY_LEN_V5,
+                cipher->iv,
+                data,
+                chunk,
+                outbuf);
+        if (ret != HPDF_OK)
+            return HPDF_SetError (cipher->dst->error, ret, 0);
+
+        ret = HPDF_Stream_Write (cipher->dst, outbuf, chunk);
+        if (ret != HPDF_OK)
+            return ret;
+
+        cipher->written += chunk;
+        data += chunk;
+        len -= chunk;
+    }
+
+    return HPDF_OK;
+}
+
+
+static HPDF_STATUS
+HPDF_R6StreamCipher_Update  (HPDF_R6StreamCipher_Rec  *cipher,
+                             const HPDF_BYTE          *data,
+                             HPDF_UINT                 len)
+{
+    HPDF_STATUS ret;
+
+    if (len == 0)
+        return HPDF_OK;
+
+    if (cipher->tail_len > 0) {
+        HPDF_UINT copy = HPDF_AES_BLOCK_SIZE - cipher->tail_len;
+
+        if (copy > len)
+            copy = len;
+
+        HPDF_MemCpy (cipher->tail + cipher->tail_len, data, copy);
+        cipher->tail_len += copy;
+        data += copy;
+        len -= copy;
+
+        if (cipher->tail_len == HPDF_AES_BLOCK_SIZE) {
+            ret = HPDF_R6StreamCipher_WriteBlocks (cipher, cipher->tail,
+                    HPDF_AES_BLOCK_SIZE);
+            if (ret != HPDF_OK)
+                return ret;
+            cipher->tail_len = 0;
+        }
+    }
+
+    if (len >= HPDF_AES_BLOCK_SIZE) {
+        HPDF_UINT block_len = len - (len % HPDF_AES_BLOCK_SIZE);
+
+        ret = HPDF_R6StreamCipher_WriteBlocks (cipher, data, block_len);
+        if (ret != HPDF_OK)
+            return ret;
+
+        data += block_len;
+        len -= block_len;
+    }
+
+    if (len > 0) {
+        HPDF_MemCpy (cipher->tail, data, len);
+        cipher->tail_len = len;
+    }
+
+    return HPDF_OK;
+}
+
+
+static HPDF_STATUS
+HPDF_R6StreamCipher_Finalize  (HPDF_R6StreamCipher_Rec  *cipher)
+{
+    HPDF_BYTE outbuf[HPDF_AES_BLOCK_SIZE * 2];
+    HPDF_UINT out_len = 0;
+    HPDF_STATUS ret;
+
+    ret = HPDF_Crypto_AESCBC_Encrypt (cipher->encrypt->file_encryption_key,
+            HPDF_OE_KEY_LEN_V5,
+            cipher->iv,
+            HPDF_TRUE,
+            cipher->tail,
+            cipher->tail_len,
+            outbuf,
+            &out_len);
+    if (ret != HPDF_OK)
+        return HPDF_SetError (cipher->dst->error, ret, 0);
+
+    ret = HPDF_Stream_Write (cipher->dst, outbuf, out_len);
+    if (ret != HPDF_OK)
+        return ret;
+
+    cipher->written += out_len;
+    cipher->tail_len = 0;
+    return HPDF_OK;
+}
+
 HPDF_STATUS
 HPDF_Stream_WriteBinary  (HPDF_Stream      stream,
                           const HPDF_BYTE  *data,
@@ -589,6 +746,8 @@ HPDF_Stream_WriteToStreamWithDeflate  (HPDF_Stream  src,
     Bytef inbuf[HPDF_STREAM_BUF_SIZ];
     Bytef otbuf[DEFLATE_BUF_SIZ];
     HPDF_BYTE ebuf[DEFLATE_BUF_SIZ];
+    HPDF_R6StreamCipher_Rec r6_cipher;
+    HPDF_BOOL use_r6 = (e && e->mode == HPDF_ENCRYPT_R6);
 
     HPDF_PTRACE((" HPDF_Stream_WriteToStreamWithDeflate\n"));
 
@@ -609,6 +768,14 @@ HPDF_Stream_WriteToStreamWithDeflate  (HPDF_Stream  src,
 
     strm.next_in = inbuf;
     strm.avail_in = 0;
+
+    if (use_r6) {
+        ret = HPDF_R6StreamCipher_Init (&r6_cipher, dst, e);
+        if (ret != HPDF_OK) {
+            deflateEnd(&strm);
+            return ret;
+        }
+    }
 
     flg = HPDF_FALSE;
     for (;;) {
@@ -638,7 +805,10 @@ HPDF_Stream_WriteToStreamWithDeflate  (HPDF_Stream  src,
             }
 
             if (strm.avail_out == 0) {
-                if (e) {
+                if (use_r6) {
+                    ret = HPDF_R6StreamCipher_Update (&r6_cipher, otbuf,
+                            DEFLATE_BUF_SIZ);
+                } else if (e) {
                     HPDF_Encrypt_CryptBuf (e, otbuf, ebuf, DEFLATE_BUF_SIZ);
                     ret = HPDF_Stream_Write(dst, ebuf, DEFLATE_BUF_SIZ);
                 } else
@@ -671,7 +841,9 @@ HPDF_Stream_WriteToStreamWithDeflate  (HPDF_Stream  src,
 
         if (strm.avail_out < DEFLATE_BUF_SIZ) {
             HPDF_UINT osize = DEFLATE_BUF_SIZ - strm.avail_out;
-            if (e) {
+            if (use_r6) {
+                ret = HPDF_R6StreamCipher_Update (&r6_cipher, otbuf, osize);
+            } else if (e) {
                 HPDF_Encrypt_CryptBuf (e, otbuf, ebuf, osize);
                 ret = HPDF_Stream_Write(dst, ebuf, osize);
             } else
@@ -688,6 +860,14 @@ HPDF_Stream_WriteToStreamWithDeflate  (HPDF_Stream  src,
 
         if (flg)
             break;
+    }
+
+    if (use_r6) {
+        ret = HPDF_R6StreamCipher_Finalize (&r6_cipher);
+        if (ret != HPDF_OK) {
+            deflateEnd(&strm);
+            return ret;
+        }
     }
 
     deflateEnd(&strm);
@@ -710,6 +890,8 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
     HPDF_BYTE buf[HPDF_STREAM_BUF_SIZ];
     HPDF_BYTE ebuf[HPDF_STREAM_BUF_SIZ];
     HPDF_BOOL flg;
+    HPDF_BOOL use_r6 = (e && e->mode == HPDF_ENCRYPT_R6);
+    HPDF_R6StreamCipher_Rec r6_cipher;
 
     HPDF_PTRACE((" HPDF_Stream_WriteToStream\n"));
     HPDF_UNUSED (filter);
@@ -723,37 +905,6 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
             HPDF_Error_GetCode (dst->error) != HPDF_NOERROR)
         return HPDF_THIS_FUNC_WAS_SKIPPED;
 
-    if (e && e->mode == HPDF_ENCRYPT_R6) {
-        HPDF_Stream tmp;
-        HPDF_BYTE *plain = NULL;
-        HPDF_BYTE *cipher = NULL;
-        HPDF_BYTE empty = 0;
-        HPDF_UINT plain_len = 0;
-        HPDF_UINT cipher_len = 0;
-
-        tmp = HPDF_MemStream_New (dst->mmgr, HPDF_STREAM_BUF_SIZ);
-        if (!tmp)
-            return HPDF_Error_GetCode (dst->error);
-
-        ret = HPDF_Stream_WriteToStream (src, tmp, filter, NULL);
-        if (ret == HPDF_OK)
-            ret = HPDF_Stream_ReadAll (tmp, dst->mmgr, &plain, &plain_len);
-        if (ret == HPDF_OK) {
-            ret = HPDF_Encrypt_CryptBufEx (e, dst->mmgr,
-                    plain_len > 0 ? plain : &empty, plain_len,
-                    &cipher, &cipher_len);
-        }
-        if (ret == HPDF_OK)
-            ret = HPDF_Stream_Write (dst, cipher, cipher_len);
-
-        if (plain)
-            HPDF_FreeMem (dst->mmgr, plain);
-        if (cipher)
-            HPDF_FreeMem (dst->mmgr, cipher);
-        HPDF_Stream_Free (tmp);
-        return ret;
-    }
-
     /* initialize input stream */
     if (HPDF_Stream_Size (src) == 0)
         return HPDF_OK;
@@ -766,6 +917,12 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
     ret = HPDF_Stream_Seek (src, 0, HPDF_SEEK_SET);
     if (ret != HPDF_OK)
         return ret;
+
+    if (use_r6) {
+        ret = HPDF_R6StreamCipher_Init (&r6_cipher, dst, e);
+        if (ret != HPDF_OK)
+            return ret;
+    }
 
     flg = HPDF_FALSE;
     for (;;) {
@@ -783,7 +940,9 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
             }
         }
 
-        if (e) {
+        if (use_r6) {
+            ret = HPDF_R6StreamCipher_Update (&r6_cipher, buf, size);
+        } else if (e) {
             HPDF_Encrypt_CryptBuf (e, buf, ebuf, size);
             ret = HPDF_Stream_Write(dst, ebuf, size);
         } else {
@@ -797,58 +956,11 @@ HPDF_Stream_WriteToStream  (HPDF_Stream  src,
             break;
     }
 
+    if (use_r6)
+        return HPDF_R6StreamCipher_Finalize (&r6_cipher);
+
     return HPDF_OK;
 }
-
-
-static HPDF_STATUS
-HPDF_Stream_ReadAll  (HPDF_Stream   stream,
-                      HPDF_MMgr     mmgr,
-                      HPDF_BYTE   **buf,
-                      HPDF_UINT    *len)
-{
-    HPDF_UINT size;
-    HPDF_UINT total = 0;
-    HPDF_STATUS ret = HPDF_OK;
-
-    *buf = NULL;
-    *len = 0;
-
-    size = HPDF_Stream_Size (stream);
-    if (size == 0)
-        return HPDF_OK;
-
-    *buf = HPDF_GetMem (mmgr, size);
-    if (!*buf)
-        return HPDF_Error_GetCode (mmgr->error);
-
-    ret = HPDF_Stream_Seek (stream, 0, HPDF_SEEK_SET);
-    if (ret != HPDF_OK) {
-        HPDF_FreeMem (mmgr, *buf);
-        *buf = NULL;
-        return ret;
-    }
-
-    while (total < size) {
-        HPDF_UINT chunk = size - total;
-
-        ret = HPDF_Stream_Read (stream, *buf + total, &chunk);
-        total += chunk;
-        if (ret == HPDF_STREAM_EOF) {
-            ret = HPDF_OK;
-            break;
-        }
-        if (ret != HPDF_OK) {
-            HPDF_FreeMem (mmgr, *buf);
-            *buf = NULL;
-            return ret;
-        }
-    }
-
-    *len = total;
-    return HPDF_OK;
-}
-
 HPDF_Stream
 HPDF_FileReader_New  (HPDF_MMgr   mmgr,
                       const char  *fname)
