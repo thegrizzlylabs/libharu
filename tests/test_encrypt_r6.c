@@ -127,7 +127,9 @@ generate_pdf(const char *output_path, const char *jpeg_path)
     ret = HPDF_SetInfoAttr(pdf, HPDF_INFO_TITLE, kTitle);
     ret |= HPDF_SetPassword(pdf, kOwnerPassword, kUserPassword);
     ret |= HPDF_SetEncryptionMode(pdf, HPDF_ENCRYPT_R6, 0);
+#ifdef LIBHPDF_HAVE_ZLIB
     ret |= HPDF_SetCompressionMode(pdf, HPDF_COMP_ALL);
+#endif
     if (ret != HPDF_OK) {
         HPDF_Free(pdf);
         return 0;
