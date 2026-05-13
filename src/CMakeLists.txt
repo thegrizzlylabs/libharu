@@ -80,6 +80,21 @@ set(
     hpdf_encoder_utf.c
 )
 
+if(NOT LIBHPDF_ENABLE_ENCRYPT_R6)
+    list(REMOVE_ITEM LIBHPDF_SRCS
+        hpdf_crypto.c
+        third_party/bearssl/src/codec/dec32be.c
+        third_party/bearssl/src/codec/dec64be.c
+        third_party/bearssl/src/codec/enc32be.c
+        third_party/bearssl/src/codec/enc64be.c
+        third_party/bearssl/src/hash/sha2big.c
+        third_party/bearssl/src/hash/sha2small.c
+        third_party/bearssl/src/symcipher/aes_common.c
+        third_party/bearssl/src/symcipher/aes_small_cbcenc.c
+        third_party/bearssl/src/symcipher/aes_small_enc.c
+    )
+endif()
+
 set_property(SOURCE hpdf_shading.c hpdf_font_tt.c hpdf_fontdef_tt.c
   PROPERTY
     SKIP_UNITY_BUILD_INCLUSION ON)
@@ -88,10 +103,12 @@ set_property(SOURCE hpdf_shading.c hpdf_font_tt.c hpdf_fontdef_tt.c
 # create hpdf library
 # =======================================================================
 add_library(hpdf ${LIBHPDF_SRCS})
-target_include_directories(hpdf PRIVATE
-    ${PROJECT_SOURCE_DIR}/src/third_party/bearssl/inc
-    ${PROJECT_SOURCE_DIR}/src/third_party/bearssl/src
-)
+if(LIBHPDF_ENABLE_ENCRYPT_R6)
+    target_include_directories(hpdf PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/third_party/bearssl/inc
+        ${PROJECT_SOURCE_DIR}/src/third_party/bearssl/src
+    )
+endif()
 set_target_properties(hpdf PROPERTIES
     SOVERSION ${HPDF_MAJOR_VERSION}.${HPDF_MINOR_VERSION}
     VERSION ${HPDF_MAJOR_VERSION}.${HPDF_MINOR_VERSION}.${HPDF_BUGFIX_VERSION}

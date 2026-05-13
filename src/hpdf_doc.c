@@ -520,6 +520,7 @@ HPDF_SetEncryptionMode  (HPDF_Doc           pdf,
         if (mode == HPDF_ENCRYPT_R2)
             e->key_len = 5;
         else if (mode == HPDF_ENCRYPT_R6) {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
             if (pdf->pdf_version < HPDF_VER_17)
                 pdf->pdf_version = HPDF_VER_17;
 
@@ -531,6 +532,9 @@ HPDF_SetEncryptionMode  (HPDF_Doc           pdf,
             else
                 return HPDF_RaiseError (&pdf->error,
                         HPDF_INVALID_ENCRYPT_KEY_LEN, 0);
+#else
+            return HPDF_RaiseError (&pdf->error, HPDF_UNSUPPORTED_FUNC, 0);
+#endif
         }
         else {
             /* if encryption mode is specified revision-3, the version of

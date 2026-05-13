@@ -16,3 +16,6 @@
 
 /* debug trace enabled */
 #undef LIBHPDF_DEBUG_TRACE
+
+/* AES-256 R6 encryption support */
+#undef LIBHPDF_ENABLE_ENCRYPT_R6

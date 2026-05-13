@@ -9,3 +9,6 @@
 
 /* debug trace enabled */
 #cmakedefine LIBHPDF_DEBUG_TRACE
+
+/* AES-256 R6 encryption support */
+#cmakedefine LIBHPDF_ENABLE_ENCRYPT_R6

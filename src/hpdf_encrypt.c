@@ -40,7 +40,9 @@
 #include "hpdf_consts.h"
 #include "hpdf_utils.h"
 #include "hpdf_encrypt.h"
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
 #include "hpdf_crypto.h"
+#endif
 #include <stdlib.h>
 
 #define HPDF_SHA256_DIGEST_LEN 32
@@ -54,6 +56,7 @@ static const HPDF_BYTE HPDF_PADDING_STRING[] = {
     0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A
 };
 
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
 static const HPDF_BYTE HPDF_PERMS_PAD_V5[12] = {
     0xFF, 0xFF, 0xFF, 0xFF, 'T', 'a', 'd', 'b', 0, 0, 0, 0
 };
@@ -290,6 +293,14 @@ HPDF_Encrypt_CreateR6Parameters  (HPDF_Encrypt  attr)
             attr->perms_v5, &out_len);
     return ret;
 }
+#else
+HPDF_STATUS
+HPDF_Encrypt_CreateR6Parameters  (HPDF_Encrypt  attr)
+{
+    (void)attr;
+    return HPDF_UNSUPPORTED_FUNC;
+}
+#endif
 
 
 /*---------------------------------------------------------------------------*/
@@ -888,7 +899,9 @@ HPDF_Encrypt_CryptBufEx  (HPDF_Encrypt      attr,
                           HPDF_BYTE       **dst,
                           HPDF_UINT        *dst_len)
 {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
     HPDF_STATUS ret;
+#endif
 
     if (!dst || !dst_len)
         return HPDF_SetError (mmgr->error, HPDF_INVALID_PARAMETER, 0);
@@ -897,6 +910,7 @@ HPDF_Encrypt_CryptBufEx  (HPDF_Encrypt      attr,
     *dst_len = 0;
 
     if (attr->mode == HPDF_ENCRYPT_R6) {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
         HPDF_BYTE iv[HPDF_AES_BLOCK_SIZE];
         HPDF_BYTE *buf;
         HPDF_UINT cipher_len = 0;
@@ -924,6 +938,9 @@ HPDF_Encrypt_CryptBufEx  (HPDF_Encrypt      attr,
         *dst = buf;
         *dst_len = cipher_len + HPDF_AES_BLOCK_SIZE;
         return HPDF_OK;
+#else
+        return HPDF_SetError (mmgr->error, HPDF_UNSUPPORTED_FUNC, 0);
+#endif
     }
 
     if (len == 0)

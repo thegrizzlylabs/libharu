@@ -946,7 +946,9 @@ HPDF_SetPermission  (HPDF_Doc    pdf,
  *     0 to request the mode default
  *
  * R6 uses a fixed 256-bit file-encryption key, so values other than 0 and 32
- * are rejected with HPDF_INVALID_ENCRYPT_KEY_LEN.
+ * are rejected with HPDF_INVALID_ENCRYPT_KEY_LEN. R6 is not available when
+ * LIBHPDF_ENABLE_ENCRYPT_R6 is undefined, including native Windows/MSVC builds;
+ * selecting it returns HPDF_UNSUPPORTED_FUNC.
  */
 HPDF_EXPORT(HPDF_STATUS)
 HPDF_SetEncryptionMode  (HPDF_Doc           pdf,

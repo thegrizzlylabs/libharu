@@ -27,8 +27,10 @@
 
 #include "hpdf_conf.h"
 #include "hpdf_consts.h"
-#include "hpdf_crypto.h"
 #include "hpdf_utils.h"
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
+#include "hpdf_crypto.h"
+#endif
 #include "hpdf_streams.h"
 
 #ifdef LIBHPDF_HAVE_ZLIB
@@ -516,6 +518,7 @@ HPDF_R6StreamCipher_Init  (HPDF_R6StreamCipher_Rec  *cipher,
                            HPDF_Stream               dst,
                            HPDF_Encrypt              encrypt)
 {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
     HPDF_STATUS ret;
 
     cipher->dst = dst;
@@ -533,6 +536,11 @@ HPDF_R6StreamCipher_Init  (HPDF_R6StreamCipher_Rec  *cipher,
 
     cipher->written = sizeof(cipher->iv);
     return HPDF_OK;
+#else
+    HPDF_UNUSED (cipher);
+    HPDF_UNUSED (encrypt);
+    return HPDF_SetError (dst->error, HPDF_UNSUPPORTED_FUNC, 0);
+#endif
 }
 
 
@@ -541,6 +549,7 @@ HPDF_R6StreamCipher_WriteBlocks  (HPDF_R6StreamCipher_Rec  *cipher,
                                   const HPDF_BYTE          *data,
                                   HPDF_UINT                 len)
 {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
     HPDF_BYTE outbuf[HPDF_STREAM_BUF_SIZ];
     HPDF_STATUS ret;
 
@@ -571,6 +580,12 @@ HPDF_R6StreamCipher_WriteBlocks  (HPDF_R6StreamCipher_Rec  *cipher,
     }
 
     return HPDF_OK;
+#else
+    HPDF_UNUSED (cipher);
+    HPDF_UNUSED (data);
+    HPDF_UNUSED (len);
+    return HPDF_UNSUPPORTED_FUNC;
+#endif
 }
 
 
@@ -579,6 +594,7 @@ HPDF_R6StreamCipher_Update  (HPDF_R6StreamCipher_Rec  *cipher,
                              const HPDF_BYTE          *data,
                              HPDF_UINT                 len)
 {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
     HPDF_STATUS ret;
 
     if (len == 0)
@@ -621,12 +637,19 @@ HPDF_R6StreamCipher_Update  (HPDF_R6StreamCipher_Rec  *cipher,
     }
 
     return HPDF_OK;
+#else
+    HPDF_UNUSED (cipher);
+    HPDF_UNUSED (data);
+    HPDF_UNUSED (len);
+    return HPDF_UNSUPPORTED_FUNC;
+#endif
 }
 
 
 static HPDF_STATUS
 HPDF_R6StreamCipher_Finalize  (HPDF_R6StreamCipher_Rec  *cipher)
 {
+#ifdef LIBHPDF_ENABLE_ENCRYPT_R6
     HPDF_BYTE outbuf[HPDF_AES_BLOCK_SIZE * 2];
     HPDF_UINT out_len = 0;
     HPDF_STATUS ret;
@@ -649,6 +672,10 @@ HPDF_R6StreamCipher_Finalize  (HPDF_R6StreamCipher_Rec  *cipher)
     cipher->written += out_len;
     cipher->tail_len = 0;
     return HPDF_OK;
+#else
+    HPDF_UNUSED (cipher);
+    return HPDF_UNSUPPORTED_FUNC;
+#endif
 }
 
 HPDF_STATUS

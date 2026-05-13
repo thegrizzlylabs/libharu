@@ -76,6 +76,11 @@ set (LIBHPDF_HAVE_LIBPNG ${PNG_FOUND})
 # support different zlib defines
 set (LIBHPDF_HAVE_ZLIB ${ZLIB_FOUND})
 
+# R6 encryption currently relies on a POSIX random backend.
+if(NOT WIN32)
+  set (LIBHPDF_ENABLE_ENCRYPT_R6 1)
+endif()
+
 # create hpdf_config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/include/hpdf_config.h.cmake
