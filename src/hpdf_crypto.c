@@ -37,7 +37,6 @@ HPDF_Crypto_RandomBytes  (HPDF_BYTE  *buf,
 #if defined(SYS_getrandom)
         rlen = syscall (SYS_getrandom, buf + offset,
                 (size_t)(len - offset), 0);
-#endif
         if (rlen > 0) {
             offset += (HPDF_UINT)rlen;
             continue;
@@ -45,6 +44,7 @@ HPDF_Crypto_RandomBytes  (HPDF_BYTE  *buf,
 
         if (rlen < 0 && errno == EINTR)
             continue;
+#endif
         break;
     }
 
