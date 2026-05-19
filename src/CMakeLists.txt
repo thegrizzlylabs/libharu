@@ -13,6 +13,7 @@ set(
     hpdf_binary.c
     hpdf_boolean.c
     hpdf_catalog.c
+    hpdf_crypto.c
     hpdf_destination.c
     hpdf_dict.c
     hpdf_direct.c
@@ -23,6 +24,15 @@ set(
     hpdf_encoder_jp.c
     hpdf_encoder_kr.c
     hpdf_encoder_utf.c
+    third_party/bearssl/src/codec/dec32be.c
+    third_party/bearssl/src/codec/dec64be.c
+    third_party/bearssl/src/codec/enc32be.c
+    third_party/bearssl/src/codec/enc64be.c
+    third_party/bearssl/src/hash/sha2big.c
+    third_party/bearssl/src/hash/sha2small.c
+    third_party/bearssl/src/symcipher/aes_common.c
+    third_party/bearssl/src/symcipher/aes_small_cbcenc.c
+    third_party/bearssl/src/symcipher/aes_small_enc.c
     hpdf_encoder.c
     hpdf_encrypt.c
     hpdf_encryptdict.c
@@ -70,6 +80,21 @@ set(
     hpdf_encoder_utf.c
 )
 
+if(NOT LIBHPDF_ENABLE_ENCRYPT_R6)
+    list(REMOVE_ITEM LIBHPDF_SRCS
+        hpdf_crypto.c
+        third_party/bearssl/src/codec/dec32be.c
+        third_party/bearssl/src/codec/dec64be.c
+        third_party/bearssl/src/codec/enc32be.c
+        third_party/bearssl/src/codec/enc64be.c
+        third_party/bearssl/src/hash/sha2big.c
+        third_party/bearssl/src/hash/sha2small.c
+        third_party/bearssl/src/symcipher/aes_common.c
+        third_party/bearssl/src/symcipher/aes_small_cbcenc.c
+        third_party/bearssl/src/symcipher/aes_small_enc.c
+    )
+endif()
+
 set_property(SOURCE hpdf_shading.c hpdf_font_tt.c hpdf_fontdef_tt.c
   PROPERTY
     SKIP_UNITY_BUILD_INCLUSION ON)
@@ -78,6 +103,12 @@ set_property(SOURCE hpdf_shading.c hpdf_font_tt.c hpdf_fontdef_tt.c
 # create hpdf library
 # =======================================================================
 add_library(hpdf ${LIBHPDF_SRCS})
+if(LIBHPDF_ENABLE_ENCRYPT_R6)
+    target_include_directories(hpdf PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/third_party/bearssl/inc
+        ${PROJECT_SOURCE_DIR}/src/third_party/bearssl/src
+    )
+endif()
 set_target_properties(hpdf PROPERTIES
     SOVERSION ${HPDF_MAJOR_VERSION}.${HPDF_MINOR_VERSION}
     VERSION ${HPDF_MAJOR_VERSION}.${HPDF_MINOR_VERSION}.${HPDF_BUGFIX_VERSION}

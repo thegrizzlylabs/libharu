@@ -189,7 +189,8 @@ typedef enum _HPDF_PdfVer {
 
 typedef enum  _HPDF_EncryptMode {
     HPDF_ENCRYPT_R2    = 2,
-    HPDF_ENCRYPT_R3    = 3
+    HPDF_ENCRYPT_R3    = 3,
+    HPDF_ENCRYPT_R6    = 6
 } HPDF_EncryptMode;
 
 

@@ -25,6 +25,30 @@
 #define HPDF_UNUSED(a) ((void)(a))
 #endif
 
+static HPDF_STATUS
+HPDF_EncryptDict_AddR6Filter  (HPDF_EncryptDict  dict)
+{
+    HPDF_Dict cf;
+    HPDF_Dict stdcf;
+    HPDF_STATUS ret = HPDF_OK;
+
+    cf = HPDF_Dict_New (dict->mmgr);
+    stdcf = HPDF_Dict_New (dict->mmgr);
+    if (!cf || !stdcf)
+        return HPDF_Error_GetCode (dict->error);
+
+    ret += HPDF_Dict_AddName (stdcf, "AuthEvent", "DocOpen");
+    ret += HPDF_Dict_AddName (stdcf, "CFM", "AESV3");
+    ret += HPDF_Dict_AddNumber (stdcf, "Length", HPDF_OE_KEY_LEN_V5);
+    ret += HPDF_Dict_Add (cf, "StdCF", stdcf);
+    ret += HPDF_Dict_Add (dict, "CF", cf);
+    ret += HPDF_Dict_AddName (dict, "StmF", "StdCF");
+    ret += HPDF_Dict_AddName (dict, "StrF", "StdCF");
+
+    return ret;
+}
+
+
 HPDF_EncryptDict
 HPDF_EncryptDict_New  (HPDF_MMgr  mmgr,
                        HPDF_Xref  xref)
@@ -132,40 +156,91 @@ HPDF_EncryptDict_Prepare  (HPDF_EncryptDict  dict,
     HPDF_Encrypt attr = (HPDF_Encrypt)dict->attr;
     HPDF_Binary user_key;
     HPDF_Binary owner_key;
+    HPDF_Binary owner_key_v5;
+    HPDF_Binary user_key_v5;
+    HPDF_Binary owner_encryption_key_v5;
+    HPDF_Binary user_encryption_key_v5;
+    HPDF_Binary perms_v5;
 
     HPDF_PTRACE((" HPDF_EncryptDict_Prepare\n"));
 
     HPDF_EncryptDict_CreateID (dict, info, xref);
-    HPDF_Encrypt_CreateOwnerKey (attr);
-    HPDF_Encrypt_CreateEncryptionKey (attr);
-    HPDF_Encrypt_CreateUserKey (attr);
+    HPDF_Dict_RemoveElement (dict, "CF");
+    HPDF_Dict_RemoveElement (dict, "StmF");
+    HPDF_Dict_RemoveElement (dict, "StrF");
+    HPDF_Dict_RemoveElement (dict, "OE");
+    HPDF_Dict_RemoveElement (dict, "UE");
+    HPDF_Dict_RemoveElement (dict, "Perms");
+    HPDF_Dict_RemoveElement (dict, "EncryptMetadata");
+    HPDF_Dict_RemoveElement (dict, "Length");
 
-    owner_key = HPDF_Binary_New (dict->mmgr, attr->owner_key, HPDF_PASSWD_LEN);
-    if (!owner_key)
-        return HPDF_Error_GetCode (dict->error);
+    if (attr->mode == HPDF_ENCRYPT_R6) {
+        ret = HPDF_Encrypt_CreateR6Parameters (attr);
+        if (ret != HPDF_OK)
+            return HPDF_SetError (dict->error, ret, 0);
 
-    if ((ret = HPDF_Dict_Add (dict, "O", owner_key)) != HPDF_OK)
-        return ret;
+        owner_key_v5 = HPDF_Binary_New (dict->mmgr, attr->owner_key_v5,
+                HPDF_OU_KEY_LEN_V5);
+        user_key_v5 = HPDF_Binary_New (dict->mmgr, attr->user_key_v5,
+                HPDF_OU_KEY_LEN_V5);
+        owner_encryption_key_v5 = HPDF_Binary_New (dict->mmgr,
+                attr->owner_encryption_key_v5, HPDF_OE_KEY_LEN_V5);
+        user_encryption_key_v5 = HPDF_Binary_New (dict->mmgr,
+                attr->user_encryption_key_v5, HPDF_OE_KEY_LEN_V5);
+        perms_v5 = HPDF_Binary_New (dict->mmgr, attr->perms_v5,
+                HPDF_PERMS_LEN_V5);
+        if (!owner_key_v5 || !user_key_v5 || !owner_encryption_key_v5 ||
+                !user_encryption_key_v5 || !perms_v5)
+            return HPDF_Error_GetCode (dict->error);
 
-    user_key = HPDF_Binary_New (dict->mmgr, attr->user_key, HPDF_PASSWD_LEN);
-    if (!user_key)
-        return HPDF_Error_GetCode (dict->error);
+        ret += HPDF_Dict_Add (dict, "O", owner_key_v5);
+        ret += HPDF_Dict_Add (dict, "U", user_key_v5);
+        ret += HPDF_Dict_Add (dict, "OE", owner_encryption_key_v5);
+        ret += HPDF_Dict_Add (dict, "UE", user_encryption_key_v5);
+        ret += HPDF_Dict_Add (dict, "Perms", perms_v5);
+        ret += HPDF_Dict_AddName (dict, "Filter", "Standard");
+        ret += HPDF_Dict_AddNumber (dict, "V", 5);
+        ret += HPDF_Dict_AddNumber (dict, "R", 6);
+        ret += HPDF_Dict_AddNumber (dict, "Length", 256);
+        ret += HPDF_Dict_AddNumber (dict, "P", attr->permission);
+        ret += HPDF_EncryptDict_AddR6Filter (dict);
+        if (!attr->encrypt_metadata)
+            ret += HPDF_Dict_AddBoolean (dict, "EncryptMetadata",
+                    HPDF_FALSE);
+    } else {
+        HPDF_Encrypt_CreateOwnerKey (attr);
+        HPDF_Encrypt_CreateEncryptionKey (attr);
+        HPDF_Encrypt_CreateUserKey (attr);
 
-    if ((ret = HPDF_Dict_Add (dict, "U", user_key)) != HPDF_OK)
-        return ret;
+        owner_key = HPDF_Binary_New (dict->mmgr, attr->owner_key,
+                HPDF_PASSWD_LEN);
+        if (!owner_key)
+            return HPDF_Error_GetCode (dict->error);
 
-    ret += HPDF_Dict_AddName (dict, "Filter", "Standard");
+        if ((ret = HPDF_Dict_Add (dict, "O", owner_key)) != HPDF_OK)
+            return ret;
 
-    if (attr->mode == HPDF_ENCRYPT_R2) {
-        ret += HPDF_Dict_AddNumber (dict, "V", 1);
-        ret += HPDF_Dict_AddNumber (dict, "R", 2);
-    } else if (attr->mode == HPDF_ENCRYPT_R3) {
-        ret += HPDF_Dict_AddNumber (dict, "V", 2);
-        ret += HPDF_Dict_AddNumber (dict, "R", 3);
-        ret += HPDF_Dict_AddNumber (dict, "Length", attr->key_len * 8);
+        user_key = HPDF_Binary_New (dict->mmgr, attr->user_key,
+                HPDF_PASSWD_LEN);
+        if (!user_key)
+            return HPDF_Error_GetCode (dict->error);
+
+        if ((ret = HPDF_Dict_Add (dict, "U", user_key)) != HPDF_OK)
+            return ret;
+
+        ret += HPDF_Dict_AddName (dict, "Filter", "Standard");
+
+        if (attr->mode == HPDF_ENCRYPT_R2) {
+            ret += HPDF_Dict_AddNumber (dict, "V", 1);
+            ret += HPDF_Dict_AddNumber (dict, "R", 2);
+        } else if (attr->mode == HPDF_ENCRYPT_R3) {
+            ret += HPDF_Dict_AddNumber (dict, "V", 2);
+            ret += HPDF_Dict_AddNumber (dict, "R", 3);
+            ret += HPDF_Dict_AddNumber (dict, "Length", attr->key_len * 8);
+        }
+
+        ret += HPDF_Dict_AddNumber (dict, "P", attr->permission);
     }
-
-    ret += HPDF_Dict_AddNumber (dict, "P", attr->permission);
 
     if (ret != HPDF_OK)
         return HPDF_Error_GetCode (dict->error);
@@ -192,14 +267,36 @@ HPDF_EncryptDict_SetPassword  (HPDF_EncryptDict  dict,
                                const char   *user_passwd)
 {
     HPDF_Encrypt attr = (HPDF_Encrypt)dict->attr;
+    HPDF_UINT owner_len;
+    HPDF_UINT user_len;
+    const char *owner = owner_passwd ? owner_passwd : "";
+    const char *user = user_passwd ? user_passwd : "";
 
     HPDF_PTRACE((" HPDF_EncryptDict_SetPassword\n"));
 
-    if (HPDF_StrLen(owner_passwd, 2) == 0)
+    if (HPDF_StrLen(owner, 2) == 0)
         return HPDF_SetError(dict->error, HPDF_ENCRYPT_INVALID_PASSWORD, 0);
 
-    HPDF_PadOrTruncatePasswd (owner_passwd, attr->owner_passwd);
-    HPDF_PadOrTruncatePasswd (user_passwd, attr->user_passwd);
+    owner_len = HPDF_StrLen (owner, HPDF_PASSWD_MAX_LEN + 1);
+    user_len = HPDF_StrLen (user, HPDF_PASSWD_MAX_LEN + 1);
+    if (owner_len > HPDF_PASSWD_MAX_LEN)
+        owner_len = HPDF_PASSWD_MAX_LEN;
+    if (user_len > HPDF_PASSWD_MAX_LEN)
+        user_len = HPDF_PASSWD_MAX_LEN;
+
+    HPDF_MemSet (attr->owner_passwd_raw, 0, HPDF_PASSWD_MAX_LEN);
+    HPDF_MemSet (attr->user_passwd_raw, 0, HPDF_PASSWD_MAX_LEN);
+    if (owner_len > 0)
+        HPDF_MemCpy (attr->owner_passwd_raw, (const HPDF_BYTE *)owner,
+                owner_len);
+    if (user_len > 0)
+        HPDF_MemCpy (attr->user_passwd_raw, (const HPDF_BYTE *)user,
+                user_len);
+    attr->owner_passwd_raw_len = owner_len;
+    attr->user_passwd_raw_len = user_len;
+
+    HPDF_PadOrTruncatePasswd (owner, attr->owner_passwd);
+    HPDF_PadOrTruncatePasswd (user, attr->user_passwd);
 
     return HPDF_OK;
 }
@@ -235,5 +332,3 @@ HPDF_EncryptDict_GetAttr (HPDF_EncryptDict  dict)
 
     return NULL;
 }
-
-

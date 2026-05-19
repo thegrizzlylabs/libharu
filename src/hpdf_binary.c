@@ -53,7 +53,7 @@ HPDF_Binary_Write  (HPDF_Binary   obj,
 {
     HPDF_STATUS ret;
 
-    if (obj->len == 0)
+    if (obj->len == 0 && !e)
         return HPDF_Stream_WriteStr (stream, "<>");
 
     if ((ret = HPDF_Stream_WriteChar (stream, '<')) != HPDF_OK)
@@ -117,4 +117,3 @@ HPDF_Binary_GetValue  (HPDF_Binary  obj)
 {
     return obj->value;
 }
-

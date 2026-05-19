@@ -83,7 +83,7 @@
 
 
 /*----------------------------------------------------------------------------*/
-/*----- permission flags (only Revision 2 is supported)-----------------------*/
+/*----- permission flags -----------------------------------------------------*/
 
 #define HPDF_ENABLE_READ         0
 #define HPDF_ENABLE_PRINT        4

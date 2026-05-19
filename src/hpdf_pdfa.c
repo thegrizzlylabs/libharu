@@ -147,6 +147,9 @@ HPDF_STATUS ConvertDateToXMDate(HPDF_Stream stream, const char *pDate)
 HPDF_STATUS
 HPDF_PDFA_SetPDFAConformance (HPDF_Doc pdf, HPDF_PDFAType pdfatype)
 {
+    if (pdf->encrypt_on)
+        return HPDF_RaiseError(&pdf->error, HPDF_INVALID_OPERATION, 0);
+
     pdf->pdfa_type = pdfatype;
     return HPDF_OK;
 }

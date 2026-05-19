@@ -936,7 +936,20 @@ HPDF_EXPORT(HPDF_STATUS)
 HPDF_SetPermission  (HPDF_Doc    pdf,
                      HPDF_UINT   permission);
 
-
+/*
+ * Select the PDF Standard Security revision used for subsequent output.
+ *
+ * key_len is expressed in bytes:
+ *   - HPDF_ENCRYPT_R2: ignored, fixed to 5 bytes (40-bit RC4)
+ *   - HPDF_ENCRYPT_R3: 5..16 bytes, or 0 to select the default 16 bytes
+ *   - HPDF_ENCRYPT_R6: fixed to 32 bytes (256-bit AES); pass 32 explicitly or
+ *     0 to request the mode default
+ *
+ * R6 uses a fixed 256-bit file-encryption key, so values other than 0 and 32
+ * are rejected with HPDF_INVALID_ENCRYPT_KEY_LEN. R6 is not available when
+ * LIBHPDF_ENABLE_ENCRYPT_R6 is undefined, including native Windows/MSVC builds;
+ * selecting it returns HPDF_UNSUPPORTED_FUNC.
+ */
 HPDF_EXPORT(HPDF_STATUS)
 HPDF_SetEncryptionMode  (HPDF_Doc           pdf,
                          HPDF_EncryptMode   mode,

@@ -129,6 +129,7 @@ HPDF_String_Write  (HPDF_String   obj,
         }
     } else {
         HPDF_BYTE* src = obj->value;
+        HPDF_BYTE* unicode_buf = NULL;
         HPDF_BYTE buf[HPDF_TEXT_DEFAULT_LEN * 2];
         HPDF_UINT tmp_len = 0;
         HPDF_BYTE* pbuf = buf;
@@ -138,6 +139,60 @@ HPDF_String_Write  (HPDF_String   obj,
 
         if ((ret = HPDF_Stream_WriteChar (stream, '<')) != HPDF_OK)
            return ret;
+
+        if (e && e->mode == HPDF_ENCRYPT_R6) {
+            HPDF_UINT unicode_len = 2;
+
+            HPDF_Encoder_SetParseText (obj->encoder, &parse_state, src, len);
+
+            for (i = 0; (HPDF_INT32)i < len; i++) {
+                HPDF_ByteType btype = HPDF_Encoder_ByteType (obj->encoder,
+                        &parse_state);
+
+                if (btype != HPDF_BYTE_TYPE_TRAIL)
+                    unicode_len += 2;
+            }
+
+            unicode_buf = HPDF_GetMem (obj->mmgr, unicode_len);
+            if (!unicode_buf)
+                return HPDF_Error_GetCode (obj->error);
+
+            HPDF_MemCpy (unicode_buf, UNICODE_HEADER, 2);
+            pbuf = unicode_buf + 2;
+            HPDF_Encoder_SetParseText (obj->encoder, &parse_state, src, len);
+
+            for (i = 0; (HPDF_INT32)i < len; i++) {
+                HPDF_BYTE b = src[i];
+                HPDF_UNICODE tmp_unicode;
+                HPDF_ByteType btype = HPDF_Encoder_ByteType (obj->encoder,
+                        &parse_state);
+
+                if (btype == HPDF_BYTE_TYPE_TRAIL)
+                    continue;
+
+                if (btype == HPDF_BYTE_TYPE_LEAD) {
+                    HPDF_BYTE b2 = src[i + 1];
+                    HPDF_UINT16 char_code =
+                            (HPDF_UINT16)((HPDF_UINT)b * 256 + b2);
+
+                    tmp_unicode = HPDF_Encoder_ToUnicode (obj->encoder,
+                            char_code);
+                } else {
+                    tmp_unicode = HPDF_Encoder_ToUnicode (obj->encoder, b);
+                }
+
+                HPDF_UInt16Swap (&tmp_unicode);
+                HPDF_MemCpy (pbuf, (HPDF_BYTE *)&tmp_unicode, 2);
+                pbuf += 2;
+            }
+
+            ret = HPDF_Stream_WriteBinary (stream, unicode_buf, unicode_len, e);
+            HPDF_FreeMem (obj->mmgr, unicode_buf);
+            if (ret != HPDF_OK)
+                return ret;
+
+            return HPDF_Stream_WriteChar (stream, '>');
+        }
 
         if ((ret = HPDF_Stream_WriteBinary (stream, UNICODE_HEADER, 2, e))
                         != HPDF_OK)

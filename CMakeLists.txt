@@ -24,6 +24,7 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 # =======================================================================
 option(BUILD_SHARED_LIBS "Build shared libraries (.dll/.so) instead of static ones (.lib/.a)" ON)
 option(LIBHPDF_EXAMPLES "Build libharu examples" OFF)
+option(LIBHPDF_TESTS "Build libharu tests" OFF)
 option(LIBHPDF_DEBUG "Enable HPDF Debug")
 option(LIBHPDF_DEBUG_TRACE "Enable HPDF Debug trace")
 
@@ -75,6 +76,11 @@ set (LIBHPDF_HAVE_LIBPNG ${PNG_FOUND})
 # support different zlib defines
 set (LIBHPDF_HAVE_ZLIB ${ZLIB_FOUND})
 
+# R6 encryption currently relies on a POSIX random backend.
+if(NOT WIN32)
+  set (LIBHPDF_ENABLE_ENCRYPT_R6 1)
+endif()
+
 # create hpdf_config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/include/hpdf_config.h.cmake
@@ -89,6 +95,10 @@ add_subdirectory(src)
 if(LIBHPDF_EXAMPLES)
     add_subdirectory(demo)
 endif(LIBHPDF_EXAMPLES)
+if(LIBHPDF_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # =======================================================================
 # installation configuration
